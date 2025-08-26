@@ -1,5 +1,9 @@
 {
-  "watch": ["dist/**/*.js"],
-  "ext": "js,json",
-  "exec": "node --enable-source-maps"
+  "watch": ["src/**/*.ts", "src/**/*.js"],
+  "ext": "ts,js,json",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "exec": "ts-node --esm src/index.ts",
+  "ignore": ["node_modules", "dist", "*.test.ts"]
 }

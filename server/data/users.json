@@ -8,8 +8,45 @@
     {
       "id": 2,
       "email": "jaehoon@interactor.com",
-      "password_hash": "$2b$10$63RnbobGcxctf1ecpAkHw.Cm7cpkB0PwT74O2v366Bdxo6ifH/uUe"
+      "password_hash": "$2b$12$EHv/MPpE5cFjOu3Ta8bX9.EBVXaE2VTxPrVDqSYiV0G5f3GlC3lUK",
+      "created_at": "2025-08-26T11:16:00.000Z",
+      "last_login": "2025-08-26T11:44:08.633Z"
+    },
+    {
+      "id": 3,
+      "email": "newuser@example.com",
+      "password_hash": "$2b$12$nb0kqNOYXQ.KV4dZWpThi.eoYxZsCsYhsRV2OWMf0gwezPVuVoXFG",
+      "created_at": "2025-08-26T11:16:00.346Z",
+      "last_login": "2025-08-26T11:19:05.760Z"
+    },
+    {
+      "id": 4,
+      "email": "demo@example.com",
+      "password_hash": "$2b$12$FOkIiNlN.ykixVvtPWWecO33IEkrtAi/vIeIPWI4TlCt3sC2oZ0Xm",
+      "created_at": "2025-08-26T11:21:58.639Z",
+      "last_login": "2025-08-26T11:22:23.119Z"
+    },
+    {
+      "id": 5,
+      "email": "jaehoon2@interactor.com",
+      "password_hash": "$2b$12$mmGbDBG9UAH/qbL5tfRyi.sRyp0vucSka8FKzDJdGRCWcRjavwsGG",
+      "created_at": "2025-08-26T11:26:04.754Z",
+      "last_login": "2025-08-26T11:39:07.620Z"
+    },
+    {
+      "id": 6,
+      "email": "hunyaci@naver.com",
+      "password_hash": "$2b$12$nt3YsGUfDrSENOsHG/5hiufHdEEglPUWcBYi6PEU5MLyeAO4DYWUq",
+      "created_at": "2025-08-26T11:27:23.385Z",
+      "last_login": "2025-08-26T11:34:12.761Z"
+    },
+    {
+      "id": 7,
+      "email": "test.gmail@interactor.com",
+      "password_hash": "$2b$12$oWKvtSUFsMXNTI7A7Dx6N.ImVcnpbSs1Ckf1jRnoR9S2DysJaMnYW",
+      "created_at": "2025-08-26T11:42:25.276Z",
+      "last_login": null
     }
   ],
-  "lastId": 2
+  "lastId": 7
 }

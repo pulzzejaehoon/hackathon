@@ -5,10 +5,44 @@ const INTERACTOR_BASE_URL = (process.env.INTERACTOR_BASE_URL || 'https://console
 const INTERACTOR_API_KEY = process.env.INTERACTOR_API_KEY;
 
 if (!INTERACTOR_API_KEY) {
-  console.warn('[IntegrationService] Missing INTERACTOR_API_KEY. Set it in server/.env');
+  console.error('[IntegrationService] CRITICAL: Missing INTERACTOR_API_KEY. Set it in server/.env');
+  console.error('[IntegrationService] Third-party integrations will not work without API key.');
+}
+
+// Retry configuration
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY = 1000; // ms
+
+// Helper function for exponential backoff retry
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  attempts = RETRY_ATTEMPTS,
+  delay = RETRY_DELAY
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (attempts <= 1) {
+      throw error;
+    }
+    
+    console.log(`[IntegrationService] Retry attempt remaining: ${attempts - 1}, waiting ${delay}ms`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return retryWithBackoff(fn, attempts - 1, delay * 2);
+  }
+}
+
+// Status cache to avoid repeated API calls
+interface CachedStatus {
+  status: StatusResponse;
+  timestamp: number;
+  ttl: number; // time to live in milliseconds
 }
 
 export class IntegrationService {
+  private static statusCache = new Map<string, CachedStatus>();
+  private static readonly CACHE_TTL = 60 * 1000; // 1 minute cache
+  
   private static integrations: Map<string, IntegrationConfig> = new Map([
     ['googlecalendar', {
       id: 'googlecalendar',
@@ -50,16 +84,29 @@ export class IntegrationService {
       return { ok: false, error: 'Integration not found' };
     }
 
+    // Validate inputs
+    if (!userEmail || !userEmail.includes('@')) {
+      return { ok: false, error: 'Valid user email is required' };
+    }
+
+    if (!INTERACTOR_API_KEY) {
+      return { ok: false, error: 'Interactor API key not configured' };
+    }
+
     try {
-      // Use correct Interactor auth-url endpoint (GET request)
       const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/auth-url`;
-      const response = await axios.get(url, {
-        params: { account: userEmail },
-        headers: {
-          'x-api-key': String(INTERACTOR_API_KEY),
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
+      
+      const response = await retryWithBackoff(async () => {
+        return await axios.get(url, {
+          params: { account: userEmail.toLowerCase().trim() },
+          headers: {
+            'x-api-key': String(INTERACTOR_API_KEY),
+            'Content-Type': 'application/json',
+            'User-Agent': 'AI-Agent-SaaS/1.0'
+          },
+          timeout: 15000,
+          validateStatus: (status) => status < 500 // Don't retry on 4xx errors
+        });
       });
 
       const data = response.data;
@@ -90,6 +137,26 @@ export class IntegrationService {
       return { ok: false, connected: false, error: 'Integration not found' };
     }
 
+    // Validate inputs
+    if (!userEmail || !userEmail.includes('@')) {
+      return { ok: false, connected: false, error: 'Valid user email is required' };
+    }
+
+    if (!INTERACTOR_API_KEY) {
+      console.warn(`[IntegrationService] No API key configured for ${integrationId} status check`);
+      return { ok: true, connected: false }; // Don't error, just show as disconnected
+    }
+
+    // Check cache first
+    const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
+    const cached = this.statusCache.get(cacheKey);
+    const now = Date.now();
+    
+    if (cached && (now - cached.timestamp) < cached.ttl) {
+      console.log(`[IntegrationService] Using cached status for ${integrationId}`);
+      return cached.status;
+    }
+
     try {
       let url = '';
       let data = {};
@@ -98,11 +165,11 @@ export class IntegrationService {
       switch (integrationId) {
         case 'googlecalendar':
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/calendar.calendarList.get/execute`;
-          data = { calendarId: userEmail };
+          data = { calendarId: userEmail.toLowerCase().trim() };
           break;
         case 'gmail':
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.labels.list/execute`;
-          data = { userId: userEmail };
+          data = { userId: userEmail.toLowerCase().trim() };
           break;
         case 'googledrive':
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/drive.about.get/execute`;
@@ -112,13 +179,17 @@ export class IntegrationService {
           return { ok: true, connected: false };
       }
 
-      const response = await axios.post(url, data, {
-        params: { account: userEmail },
-        headers: {
-          'x-api-key': String(INTERACTOR_API_KEY),
-          'Content-Type': 'application/json'
-        },
-        timeout: 5000
+      const response = await retryWithBackoff(async () => {
+        return await axios.post(url, data, {
+          params: { account: userEmail.toLowerCase().trim() },
+          headers: {
+            'x-api-key': String(INTERACTOR_API_KEY),
+            'Content-Type': 'application/json',
+            'User-Agent': 'AI-Agent-SaaS/1.0'
+          },
+          timeout: 8000, // Increased timeout
+          validateStatus: (status) => status < 500 // Don't retry on 4xx errors
+        });
       });
 
       // Check if response indicates authentication/permission issues
@@ -127,20 +198,40 @@ export class IntegrationService {
         const errorCode = responseBody.error.code;
         const errorStatus = responseBody.error.status;
         
-        // 401 (unauthorized), 403 (forbidden) means not connected
+        // 401 (unauthorized), 403 (forbidden), delegation denied means not connected
         if (errorCode === 401 || errorCode === 403 || 
-            errorStatus === 'UNAUTHENTICATED' || errorStatus === 'PERMISSION_DENIED') {
+            errorStatus === 'UNAUTHENTICATED' || errorStatus === 'PERMISSION_DENIED' ||
+            responseBody.error.message?.includes('Delegation denied')) {
           console.warn(`[IntegrationService] ${integrationId} not connected - Auth error:`, responseBody.error.message);
           return { ok: true, connected: false };
         }
       }
 
       // If we get a successful response (200) with no auth errors, user is connected
-      return { ok: true, connected: true };
+      const result = { ok: true, connected: true };
+      
+      // Cache the successful result
+      this.statusCache.set(cacheKey, {
+        status: result,
+        timestamp: now,
+        ttl: this.CACHE_TTL
+      });
+      
+      return result;
     } catch (error: any) {
       // If the API call fails, assume not connected
       console.warn(`[IntegrationService] Status check failed for ${integrationId}:`, error.message);
-      return { ok: true, connected: false };
+      
+      const result = { ok: true, connected: false };
+      
+      // Cache the failed result with shorter TTL
+      this.statusCache.set(cacheKey, {
+        status: result,
+        timestamp: now,
+        ttl: this.CACHE_TTL / 2 // 30 seconds for failed attempts
+      });
+      
+      return result;
     }
   }
 
@@ -166,6 +257,10 @@ export class IntegrationService {
         throw new Error(data.error || 'Disconnect failed');
       }
 
+      // Clear cache for this user's integration status
+      const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
+      this.statusCache.delete(cacheKey);
+      
       return { 
         ok: true, 
         message: `${integration.name} disconnected successfully` 
