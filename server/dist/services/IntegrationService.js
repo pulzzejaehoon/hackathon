@@ -43,12 +43,10 @@ export class IntegrationService {
             return { ok: false, error: 'Integration not found' };
         }
         try {
-            // Use execute endpoint to get auth URL
-            const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/execute`;
-            const response = await axios.post(url, {
-                action: 'auth-url',
-                account: userEmail
-            }, {
+            // Use correct Interactor auth-url endpoint (GET request)
+            const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/auth-url`;
+            const response = await axios.get(url, {
+                params: { account: userEmail },
                 headers: {
                     'x-api-key': String(INTERACTOR_API_KEY),
                     'Content-Type': 'application/json'
@@ -81,21 +79,47 @@ export class IntegrationService {
             return { ok: false, connected: false, error: 'Integration not found' };
         }
         try {
-            // Use execute endpoint to check status
-            const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/execute`;
-            const response = await axios.post(url, {
-                action: 'status',
-                account: userEmail
-            }, {
+            let url = '';
+            let data = {};
+            // Use appropriate API call for each service
+            switch (integrationId) {
+                case 'googlecalendar':
+                    url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/calendar.calendarList.get/execute`;
+                    data = { calendarId: userEmail };
+                    break;
+                case 'gmail':
+                    url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.labels.list/execute`;
+                    data = { userId: userEmail };
+                    break;
+                case 'googledrive':
+                    url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/drive.about.get/execute`;
+                    data = {};
+                    break;
+                default:
+                    return { ok: true, connected: false };
+            }
+            const response = await axios.post(url, data, {
+                params: { account: userEmail },
                 headers: {
                     'x-api-key': String(INTERACTOR_API_KEY),
                     'Content-Type': 'application/json'
                 },
-                timeout: 10000
+                timeout: 5000
             });
-            const data = response.data;
-            const connected = data?.output?.connected || data?.connected || false;
-            return { ok: true, connected };
+            // Check if response indicates authentication/permission issues
+            const responseBody = response.data?.body || response.data?.output?.body || response.data;
+            if (responseBody?.error) {
+                const errorCode = responseBody.error.code;
+                const errorStatus = responseBody.error.status;
+                // 401 (unauthorized), 403 (forbidden) means not connected
+                if (errorCode === 401 || errorCode === 403 ||
+                    errorStatus === 'UNAUTHENTICATED' || errorStatus === 'PERMISSION_DENIED') {
+                    console.warn(`[IntegrationService] ${integrationId} not connected - Auth error:`, responseBody.error.message);
+                    return { ok: true, connected: false };
+                }
+            }
+            // If we get a successful response (200) with no auth errors, user is connected
+            return { ok: true, connected: true };
         }
         catch (error) {
             // If the API call fails, assume not connected
@@ -110,9 +134,8 @@ export class IntegrationService {
         }
         try {
             const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/disconnect`;
-            const response = await axios.post(url, {
-                account: userEmail
-            }, {
+            const response = await axios.post(url, {}, {
+                params: { account: userEmail },
                 headers: {
                     'x-api-key': String(INTERACTOR_API_KEY),
                     'Content-Type': 'application/json'

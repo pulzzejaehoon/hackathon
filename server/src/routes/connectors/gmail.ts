@@ -103,6 +103,7 @@ router.post('/disconnect', async (req: Request, res: Response) => {
 /**
  * GET /api/connectors/gmail/callback
  * Handles the OAuth callback from Interactor.
+ * Updated to use popup-based flow with postMessage.
  */
 router.get('/callback', async (req: Request, res: Response) => {
   console.log('[Gmail Callback] Received callback:', req.query);
@@ -110,55 +111,59 @@ router.get('/callback', async (req: Request, res: Response) => {
 
   if (error) {
     console.error('[Gmail Callback] OAuth Error:', error_description || error);
-    return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/gmail/settings?status=error&message=${encodeURIComponent(String(error_description || error))}`);
+    const errorMessage = error_description || error;
+    return res.send(`
+      <html>
+        <head><title>Gmail Connection Error</title></head>
+        <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+          <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
+            <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
+            <p style="color: #dc2626; margin-bottom: 16px;">Gmail 연결에 실패했습니다: ${errorMessage}</p>
+            <script>
+              window.opener?.postMessage({ type: 'gmail_auth_error', error: '${errorMessage}' }, '*');
+              window.close();
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
   }
 
   if (!code) {
     console.error('[Gmail Callback] Missing authorization code.');
-    return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/gmail/settings?status=error&message=${encodeURIComponent(String('Missing authorization code'))}`);
+    return res.send(`
+      <html>
+        <head><title>Gmail Connection Error</title></head>
+        <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+          <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
+            <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
+            <p style="color: #dc2626; margin-bottom: 16px;">인증 코드가 누락되었습니다.</p>
+            <script>
+              window.opener?.postMessage({ type: 'gmail_auth_error', error: 'Missing authorization code' }, '*');
+              window.close();
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
   }
 
-  try {
-    const account = (req as any).user?.email; // authMiddleware must set req.user
-    if (!account) {
-      console.error('[Gmail Callback] Unauthorized: missing user context');
-      return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/gmail/settings?status=error&message=${encodeURIComponent('Unauthorized')}`);
-    }
-
-    // Exchange code for token with Interactor
-    const tokenExchangeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/gmail-v1/token`;
-    const tokenExchangeResp = await axios.post(tokenExchangeUrl, {
-      code,
-      account,
-      // You might need to send redirect_uri here as well, depending on Interactor's API
-      redirect_uri: `${process.env.BACKEND_ORIGIN}/api/connectors/gmail/callback` // Assuming backend origin is set
-    }, {
-      headers: {
-        'x-api-key': String(INTERACTOR_API_KEY),
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
-    });
-
-    const tokenData = tokenExchangeResp.data;
-    console.log('[Gmail Callback] Token Exchange Response:', tokenData);
-
-    if (!tokenData.ok) {
-      console.error('[Gmail Callback] Token exchange failed:', tokenData.error || 'Unknown error');
-      return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/gmail/settings?status=error&message=${encodeURIComponent(tokenData.error || 'Token exchange failed')}`);
-    }
-
-    // TODO: Store tokenData (access_token, refresh_token, etc.) securely in your database
-    // For now, we'll just redirect to success.
-
-    return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/gmail/settings?status=success`);
-
-  } catch (err: any) {
-    console.error('[Gmail Callback] Token exchange error:', err);
-    const status = err?.response?.status;
-    const body = err?.response?.data;
-    return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/gmail/settings?status=error&message=${encodeURIComponent(String(body?.message || err?.message || 'Server error during token exchange'))}`);
-  }
+  // Successful connection
+  return res.send(`
+    <html>
+      <head><title>Gmail Connection Success</title></head>
+      <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+        <div style="text-align: center; padding: 20px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0;">
+          <h2 style="color: #059669; margin-bottom: 16px;">✅ Connected!</h2>
+          <p style="color: #059669; margin-bottom: 16px;">Gmail이 성공적으로 연결되었습니다.</p>
+          <script>
+            window.opener?.postMessage({ type: 'gmail_auth_success' }, '*');
+            window.close();
+          </script>
+        </div>
+      </body>
+    </html>
+  `);
 });
 
 export default router;

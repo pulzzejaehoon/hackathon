@@ -9,7 +9,8 @@
       "Bash(node:*)",
       "Bash(PORT=3002 npm start)",
       "Bash(pg_isready:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

@@ -26,8 +26,8 @@ router.get('/list', async (req: Request, res: Response) => {
       account,
       action: 'googlecalendar-v1/action/calendar.calendarList.list',
       data: {
-        maxResults: "250",
-        showHidden: "false"
+        maxResults: 250,
+        showHidden: false
       }
     });
 
@@ -73,8 +73,7 @@ router.post('/quick-add', async (req: Request, res: Response) => {
       data: { 
         calendarId: "primary",
         text: text.trim(),
-        sendNotifications: "false",
-        sendUpdates: "none"
+        sendNotifications: false
       }
     });
 

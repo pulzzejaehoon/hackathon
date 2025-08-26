@@ -18,11 +18,9 @@ router.get('/auth-url', async (req, res) => {
         if (!account) {
             return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
         }
-        const url = `${INTERACTOR_BASE_URL}/connector/interactor/googlecalendar-v1/execute`;
-        const interactorResp = await axios.post(url, {
-            action: 'auth-url',
-            account: account
-        }, {
+        const url = `${INTERACTOR_BASE_URL}/connector/interactor/googlecalendar-v1/auth-url`;
+        const interactorResp = await axios.get(url, {
+            params: { account: account },
             headers: {
                 'x-api-key': String(INTERACTOR_API_KEY),
                 'Content-Type': 'application/json'
@@ -64,20 +62,21 @@ router.get('/status', async (req, res) => {
         if (!account) {
             return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
         }
-        // Check if user has valid token via Interactor
-        const statusUrl = `${INTERACTOR_BASE_URL}/connector/interactor/googlecalendar-v1/execute`;
+        // Check if user has valid token via Interactor - test with calendar list
+        const statusUrl = `${INTERACTOR_BASE_URL}/connector/interactor/googlecalendar-v1/action/calendar.calendarList.get/execute`;
         const statusResp = await axios.post(statusUrl, {
-            action: 'status',
-            account: account
+            calendarId: account
         }, {
+            params: { account: account },
             headers: {
                 'x-api-key': String(INTERACTOR_API_KEY),
                 'Content-Type': 'application/json'
             },
-            timeout: 10000
+            timeout: 5000
         });
         const data = statusResp.data;
-        const isConnected = data?.output?.connected || data?.connected || false;
+        // If we get a successful response, user is connected
+        const isConnected = !!(data && !data.error);
         return res.json({ ok: true, connected: isConnected });
     }
     catch (err) {

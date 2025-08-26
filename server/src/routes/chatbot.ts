@@ -12,64 +12,73 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1'
 });
 
-// Smart chat function
+// Smart chat function - Pure conversational responses
 async function getSmartResponse(messages: any[], account: string) {
-  // Get user's connected services
-  const statuses = await IntegrationService.getAllStatuses(account);
-  const connectedServices = statuses
-    .filter((s: {id: string, connected: boolean}) => s.connected)
-    .map((s: {id: string, connected: boolean}) => s.id)
-    .join(', ');
-  
-  const systemPrompt = "너는 사용자의 연결된 서비스를 관리하는데 도움을 주는 AI 어시스턴트야.\n\n현재 사용자가 연결한 서비스: " + (connectedServices || "없음") + "\n\n사용 가능한 기능:\n- Google Calendar: 오늘 일정 보기, 자연어로 새 일정 만들기\n- Gmail: 안읽은 메일 보기 (곧 추가될 예정)\n- Google Drive: 최근 파일 보기 (곧 추가될 예정)\n\n사용자가 연결되지 않은 서비스에 대한 작업을 요청하면, 먼저 오른쪽 패널에서 해당 서비스를 연결하라고 안내해줘.\n캘린더 일정의 경우 \"내일 오후 3시에 팀 회의\" 같은 자연어로 만들 수 있어.\n항상 한국어로 도움이 되고 간결하게 응답해줘.\n만약 사용자가 일정 보기나 일정 만들기 같은 작업을 요청하면, 퀵 액션 버튼을 사용하거나 구체적인 명령어를 제안해줘.";
-
   const lastMessage = messages[messages.length - 1]?.content || '';
-  const hasConnectedServices = connectedServices && connectedServices !== 'none';
+  
+  // Generate natural conversational responses
+  const responses = [
+    // Greetings
+    { keywords: ['안녕', 'hello', 'hi', '하이'], responses: [
+      '안녕하세요! 오늘 하루는 어떠세요?',
+      '안녕하세요! 무엇을 도와드릴까요?',
+      '반가워요! 좋은 하루 보내고 계신가요?'
+    ]},
+    
+    // Questions about work/productivity
+    { keywords: ['일', '작업', '업무', 'work'], responses: [
+      '오늘 어떤 일을 하고 계신가요? 도움이 필요하시면 언제든 말씀해주세요!',
+      '업무가 많으시군요! 스케줄 관리나 일정 정리가 필요하시면 아래 퀵 액션 버튼을 활용해보세요.',
+      '일하시느라 고생 많으세요. 무엇인가 정리하거나 관리할 것이 있으시면 도와드릴게요!'
+    ]},
+    
+    // Calendar/schedule related
+    { keywords: ['일정', '캘린더', '스케줄', '약속'], responses: [
+      '일정 관리는 정말 중요하죠! 아래 캘린더 버튼을 사용해서 오늘 일정을 확인하거나 새로운 일정을 추가해보세요.',
+      '스케줄이 복잡하실 것 같네요. 캘린더 연동이 되어 있다면 빠른 액션으로 쉽게 관리할 수 있어요!',
+      '약속이나 일정이 많으시군요! 구글 캘린더와 연동해서 더 편리하게 관리해보시는 건 어떨까요?'
+    ]},
+    
+    // Email related  
+    { keywords: ['메일', '이메일', 'email', 'gmail'], responses: [
+      '이메일 관리도 업무에서 중요한 부분이죠. Gmail 기능은 곧 추가될 예정이니 조금만 기다려주세요!',
+      '메일함이 복잡하시나봐요. 곧 Gmail 연동 기능을 추가해서 더 편리하게 관리할 수 있도록 할게요.',
+      '이메일 확인하시느라 바쁘시겠네요! Gmail 기능은 개발 중이에요.'
+    ]},
+    
+    // General conversation
+    { keywords: ['어떻게', '뭐', '무엇', '어디', '언제', '왜'], responses: [
+      '궁금한 게 있으시군요! 구체적으로 어떤 도움이 필요하신지 말씀해주시면 더 잘 도와드릴 수 있어요.',
+      '질문이 있으시네요. 서비스 연동이나 일정 관리 등 필요한 기능이 있으시면 알려주세요!',
+      '더 자세히 설명해주시면 맞춤형으로 도움을 드릴 수 있을 것 같아요.'
+    ]},
+    
+    // Positive responses
+    { keywords: ['좋아', '감사', '고마워', '최고', '훌륭'], responses: [
+      '기뻐해주셔서 감사해요! 더 도움이 필요하시면 언제든 말씀해주세요.',
+      '칭찬해주셔서 고맙습니다! 앞으로도 더 나은 서비스로 도움드리겠어요.',
+      '만족해주셔서 다행이에요! 계속해서 유용한 기능들을 제공해드릴게요.'
+    ]}
+  ];
 
-  // 간단한 키워드 기반 응답 (API 호출 실패 시 백업용)
-  let fallbackResponse = '';
-  if (lastMessage.includes('안녕') || lastMessage.includes('hello')) {
-    if (hasConnectedServices) {
-      fallbackResponse = "안녕하세요! 현재 " + connectedServices + " 서비스가 연결되어 있습니다. 무엇을 도와드릴까요?";
-    } else {
-      fallbackResponse = '안녕하세요! 오른쪽 패널에서 서비스를 먼저 연결해주세요. 그러면 일정 관리, 메일 확인 등을 도와드릴 수 있습니다.';
-    }
-  } else if (lastMessage.includes('일정') || lastMessage.includes('캘린더')) {
-    if (connectedServices.includes('googlecalendar')) {
-      fallbackResponse = '캘린더가 연결되어 있네요! "오늘 일정 보여줘" 버튼을 클릭하거나 "내일 오후 3시에 회의 일정 추가해줘" 같이 말씀해주세요.';
-    } else {
-      fallbackResponse = '캘린더 기능을 사용하려면 먼저 오른쪽 패널에서 Google Calendar를 연결해주세요.';
-    }
-  } else if (lastMessage.includes('메일') || lastMessage.includes('gmail')) {
-    fallbackResponse = 'Gmail 기능은 곧 추가될 예정입니다. 현재는 캘린더 기능만 사용 가능합니다.';
-  } else {
-    if (hasConnectedServices) {
-      fallbackResponse = "현재 " + connectedServices + " 서비스가 연결되어 있습니다. 아래 퀵 액션 버튼을 사용하거나 원하는 작업을 말씀해주세요.";
-    } else {
-      fallbackResponse = '먼저 오른쪽 패널에서 Google Calendar, Gmail, Drive 중 하나를 연결해주세요. 그러면 해당 서비스와 관련된 작업을 도와드릴 수 있습니다.';
+  // Find matching response
+  for (const responseGroup of responses) {
+    if (responseGroup.keywords.some(keyword => lastMessage.toLowerCase().includes(keyword))) {
+      const randomResponse = responseGroup.responses[Math.floor(Math.random() * responseGroup.responses.length)];
+      return randomResponse;
     }
   }
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct:free',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages.map((m: any) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content
-        }))
-      ],
-      max_tokens: 500,
-      temperature: 0.7
-    });
-
-    return response.choices[0]?.message?.content || fallbackResponse || '죄송합니다. 응답을 생성할 수 없습니다.';
-  } catch (error: any) {
-    console.error('OpenAI API error:', error);
-    // Use fallback response
-    return fallbackResponse || '안녕하세요! AI 어시스턴트입니다. 연결된 서비스를 통해 도움을 드릴 수 있습니다. 오른쪽 패널에서 서비스를 연결하고 빠른 작업 버튼을 사용해보세요!';
-  }
+  
+  // Default conversational responses
+  const defaultResponses = [
+    '흥미로운 이야기네요! 더 자세히 들려주세요.',
+    '그렇군요! 제가 어떻게 도와드릴까요?',
+    '말씀해주셔서 감사해요. 다른 도움이 필요한 것은 없나요?',
+    '이해했어요. 필요한 기능이나 도움이 있으시면 아래 버튼들을 활용해보세요!',
+    '좋은 생각이네요! 무엇인가 더 도움드릴 것이 있을까요?'
+  ];
+  
+  return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 }
 
 /**
@@ -218,8 +227,12 @@ router.post('/action', async (req: Request, res: Response) => {
 });
 
 async function handleCalendarAction(account: string, action: string, params: any) {
+  console.log(`[Calendar Action] account: ${account}, action: ${action}, params:`, params);
+  
   // Check if user is connected
   const status = await IntegrationService.getStatus('googlecalendar', account);
+  console.log(`[Calendar Action] Status check result:`, status);
+  
   if (!status.connected) {
     return {
       success: true,
@@ -241,6 +254,9 @@ async function handleCalendarAction(account: string, action: string, params: any
 
         // Use correct Interactor API format
         const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/googlecalendar-v1/action/calendar.events.quickAdd/execute`;
+        console.log(`[Calendar QuickAdd] URL: ${url}?account=${account}`);
+        console.log(`[Calendar QuickAdd] Data:`, { calendarId: "primary", text: eventText.trim() });
+        
         const response = await axios.post(url, {
           calendarId: "primary",
           text: eventText.trim()
@@ -253,33 +269,95 @@ async function handleCalendarAction(account: string, action: string, params: any
           timeout: 10000
         });
         
-        const result = { success: true, output: response.data };
-
-        if (!result.success) {
+        console.log(`[Calendar QuickAdd] Response:`, JSON.stringify(response.data, null, 2));
+        
+        if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📅 일정 생성에 실패했습니다: ${result.error}`
+            content: `📅 일정 생성에 실패했습니다: ${response.data?.error || 'API 오류'}`
           };
         }
 
-        const event = result.output;
+        // Handle multiple possible response structures
+        let event = null;
+        if (response.data.body) {
+          event = response.data.body;
+        } else if (response.data.output?.body) {
+          event = response.data.output.body;
+        } else if (response.data.output) {
+          event = response.data.output;
+        } else {
+          event = response.data;
+        }
+        
+        console.log(`[Calendar QuickAdd] Extracted event:`, JSON.stringify(event, null, 2));
+        
+        if (!event) {
+          return {
+            success: true,
+            content: `📅 일정이 생성되었지만 세부 정보를 가져올 수 없습니다.`
+          };
+        }
+        
+        const eventTitle = event.summary || event.title || '제목 없음';
+        let eventTime = '시간 정보 없음';
+        
+        if (event.start) {
+          if (event.start.dateTime) {
+            eventTime = new Date(event.start.dateTime).toLocaleString('ko-KR', {
+              year: 'numeric',
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'Asia/Seoul'
+            });
+          } else if (event.start.date) {
+            eventTime = new Date(event.start.date + 'T00:00:00').toLocaleDateString('ko-KR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }) + ' (종일)';
+          }
+        }
+        
         return {
           success: true,
-          content: `📅 일정이 성공적으로 생성되었습니다!\n\n제목: ${event?.summary || '제목 없음'}\n시간: ${event?.start?.dateTime ? new Date(event.start.dateTime).toLocaleString('ko-KR') : '시간 정보 없음'}`
+          content: `📅 일정이 성공적으로 생성되었습니다!\n\n제목: ${eventTitle}\n시간: ${eventTime}`
         };
       }
 
       case 'getTodaysEvents':
       case 'listEvents': {
-        const today = new Date();
-        const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1);
+        // Use Korea timezone for today's events
+        const now = new Date();
+        const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+        
+        // Start of today in Korea timezone
+        const todayStart = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate(), 0, 0, 0);
+        // End of today in Korea timezone  
+        const todayEnd = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate(), 23, 59, 59);
         
         const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/googlecalendar-v1/action/calendar.events.list/execute`;
+        console.log(`[Calendar Events List] URL: ${url}?account=${account}`);
+        console.log(`[Calendar Events List] Korea time range:`, {
+          koreaTime: koreaTime.toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'}),
+          todayStart: todayStart.toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'}),
+          todayEnd: todayEnd.toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'})
+        });
+        console.log(`[Calendar Events List] Data:`, {
+          calendarId: "primary",
+          timeMin: todayStart.toISOString(),
+          timeMax: todayEnd.toISOString(),
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 10
+        });
+        
         const response = await axios.post(url, {
           calendarId: "primary",
-          timeMin: today.toISOString(),
-          timeMax: tomorrow.toISOString(),
+          timeMin: todayStart.toISOString(),
+          timeMax: todayEnd.toISOString(),
           singleEvents: true,
           orderBy: "startTime",
           maxResults: 10
@@ -292,17 +370,36 @@ async function handleCalendarAction(account: string, action: string, params: any
           timeout: 10000
         });
         
-        const result = { success: true, output: response.data };
-
-        if (!result.success) {
+        console.log(`[Calendar Events List] Response:`, JSON.stringify(response.data, null, 2));
+        
+        if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📅 일정을 가져오는데 실패했습니다: ${result.error}`
+            content: `📅 일정을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
           };
         }
 
-        const events = result.output?.items || [];
-        if (events.length === 0) {
+        // Handle multiple possible response structures
+        let events = [];
+        if (response.data.body?.items) {
+          events = response.data.body.items;
+        } else if (response.data.output?.body?.items) {
+          events = response.data.output.body.items;
+        } else if (response.data.output?.items) {
+          events = response.data.output.items;
+        } else if (response.data.items) {
+          events = response.data.items;
+        } else if (Array.isArray(response.data.body)) {
+          events = response.data.body;
+        } else if (Array.isArray(response.data.output)) {
+          events = response.data.output;
+        } else if (Array.isArray(response.data)) {
+          events = response.data;
+        }
+        
+        console.log(`[Calendar Events List] Extracted ${events.length} events:`, JSON.stringify(events, null, 2));
+        
+        if (!events || events.length === 0) {
           return {
             success: true,
             content: '📅 오늘 예정된 일정이 없습니다.'
@@ -311,10 +408,22 @@ async function handleCalendarAction(account: string, action: string, params: any
 
         let content = '📅 오늘의 일정:\n\n';
         events.forEach((event: any, index: number) => {
-          const startTime = event.start?.dateTime 
-            ? new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-            : '종일';
-          content += `${index + 1}. ${event.summary || '제목 없음'} (${startTime})\n`;
+          const eventTitle = event.summary || event.title || '제목 없음';
+          let startTime = '시간 정보 없음';
+          
+          if (event.start) {
+            if (event.start.dateTime) {
+              startTime = new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                timeZone: 'Asia/Seoul'
+              });
+            } else if (event.start.date) {
+              startTime = '종일';
+            }
+          }
+          
+          content += `${index + 1}. ${eventTitle} (${startTime})\n`;
         });
 
         return {
@@ -338,7 +447,11 @@ async function handleCalendarAction(account: string, action: string, params: any
 }
 
 async function handleGmailAction(account: string, action: string, params: any) {
+  console.log(`[Gmail Action] account: ${account}, action: ${action}, params:`, params);
+  
   const status = await IntegrationService.getStatus('gmail', account);
+  console.log(`[Gmail Action] Status check result:`, status);
+  
   if (!status.connected) {
     return {
       success: true,
@@ -346,10 +459,203 @@ async function handleGmailAction(account: string, action: string, params: any) {
     };
   }
 
-  return {
-    success: true,
-    content: '📧 Gmail 기능은 곧 추가될 예정입니다!'
-  };
+  try {
+    switch (action) {
+      case 'createDraft': {
+        const { to, subject, body } = params || {};
+        if (!to || !subject) {
+          return {
+            success: true,
+            content: '📧 받는 사람과 제목을 입력해주세요.'
+          };
+        }
+
+        // Create Gmail draft using Interactor API
+        const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/gmail-v1/action/gmail.users.drafts.create/execute`;
+        console.log(`[Gmail Draft Create] URL: ${url}?account=${account}`);
+        console.log(`[Gmail Draft Create] Data:`, {
+          userId: account,
+          message: {
+            to: [to],
+            subject: subject,
+            textBody: body || ''
+          }
+        });
+        
+        const response = await axios.post(url, {
+          userId: account,
+          message: {
+            to: [to],
+            subject: subject,
+            textBody: body || ''
+          }
+        }, {
+          params: { account },
+          headers: {
+            'x-api-key': String(process.env.INTERACTOR_API_KEY),
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        console.log(`[Gmail Draft Create] Response:`, JSON.stringify(response.data, null, 2));
+        
+        if (!response.data || response.data.error) {
+          return {
+            success: true,
+            content: `📧 초안 생성에 실패했습니다: ${response.data?.error || 'API 오류'}`
+          };
+        }
+
+        return {
+          success: true,
+          content: `📧 이메일 초안이 성공적으로 생성되었습니다!\n\n받는 사람: ${to}\n제목: ${subject}\n\nGmail에서 확인하고 발송할 수 있습니다.`
+        };
+      }
+
+      case 'listMessages':
+      case 'getInbox': {
+        const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/gmail-v1/action/gmail.users.messages.list/execute`;
+        console.log(`[Gmail Messages List] URL: ${url}?account=${account}`);
+        console.log(`[Gmail Messages List] Data:`, {
+          userId: account,
+          maxResults: 10,
+          q: 'in:inbox'
+        });
+        
+        const response = await axios.post(url, {
+          userId: account,
+          maxResults: 10,
+          q: 'in:inbox'
+        }, {
+          params: { account },
+          headers: {
+            'x-api-key': String(process.env.INTERACTOR_API_KEY),
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        console.log(`[Gmail Messages List] Response:`, JSON.stringify(response.data, null, 2));
+        
+        if (!response.data || response.data.error) {
+          return {
+            success: true,
+            content: `📧 메일 목록을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+          };
+        }
+
+        // Handle multiple possible response structures
+        let messages = [];
+        if (response.data.body?.messages) {
+          messages = response.data.body.messages;
+        } else if (response.data.output?.body?.messages) {
+          messages = response.data.output.body.messages;
+        } else if (response.data.output?.messages) {
+          messages = response.data.output.messages;
+        } else if (response.data.messages) {
+          messages = response.data.messages;
+        } else if (Array.isArray(response.data.body)) {
+          messages = response.data.body;
+        } else if (Array.isArray(response.data.output)) {
+          messages = response.data.output;
+        } else if (Array.isArray(response.data)) {
+          messages = response.data;
+        }
+        
+        console.log(`[Gmail Messages List] Extracted ${messages.length} messages`);
+        
+        if (!messages || messages.length === 0) {
+          return {
+            success: true,
+            content: '📧 받은편지함에 메일이 없습니다.'
+          };
+        }
+
+        let content = '📧 최근 받은 메일 목록:\n\n';
+        messages.slice(0, 5).forEach((message: any, index: number) => {
+          // Note: Gmail API might return just message IDs, would need additional call to get details
+          content += `${index + 1}. 메시지 ID: ${message.id || '정보 없음'}\n`;
+        });
+        content += `\n💡 상세 내용은 Gmail에서 확인하세요.`;
+
+        return {
+          success: true,
+          content: content.trim()
+        };
+      }
+
+      case 'listLabels': {
+        const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/gmail-v1/action/gmail.users.labels.list/execute`;
+        console.log(`[Gmail Labels List] URL: ${url}?account=${account}`);
+        console.log(`[Gmail Labels List] Data:`, { userId: account });
+        
+        const response = await axios.post(url, {
+          userId: account
+        }, {
+          params: { account },
+          headers: {
+            'x-api-key': String(process.env.INTERACTOR_API_KEY),
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        console.log(`[Gmail Labels List] Response:`, JSON.stringify(response.data, null, 2));
+        
+        if (!response.data || response.data.error) {
+          return {
+            success: true,
+            content: `📧 라벨 목록을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+          };
+        }
+
+        // Handle multiple possible response structures for labels
+        let labels = [];
+        if (response.data.body?.labels) {
+          labels = response.data.body.labels;
+        } else if (response.data.output?.body?.labels) {
+          labels = response.data.output.body.labels;
+        } else if (response.data.output?.labels) {
+          labels = response.data.output.labels;
+        } else if (response.data.labels) {
+          labels = response.data.labels;
+        }
+        
+        console.log(`[Gmail Labels List] Extracted ${labels.length} labels`);
+        
+        if (!labels || labels.length === 0) {
+          return {
+            success: true,
+            content: '📧 Gmail 라벨이 없습니다.'
+          };
+        }
+
+        let content = '📧 Gmail 라벨 목록:\n\n';
+        labels.slice(0, 10).forEach((label: any, index: number) => {
+          const labelName = label.name || label.id || '이름 없음';
+          content += `${index + 1}. ${labelName}\n`;
+        });
+
+        return {
+          success: true,
+          content: content.trim()
+        };
+      }
+
+      default:
+        return {
+          success: true,
+          content: `📧 알 수 없는 Gmail 액션: ${action}`
+        };
+    }
+  } catch (error: any) {
+    console.error(`[Gmail Action] Error:`, error);
+    return {
+      success: true,
+      content: `📧 Gmail 작업 중 오류가 발생했습니다: ${error.message}`
+    };
+  }
 }
 
 async function handleDriveAction(account: string, action: string, params: any) {

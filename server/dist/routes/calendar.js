@@ -23,8 +23,8 @@ router.get('/list', async (req, res) => {
             account,
             action: 'googlecalendar-v1/action/calendar.calendarList.list',
             data: {
-                maxResults: "250",
-                showHidden: "false"
+                maxResults: 250,
+                showHidden: false
             }
         });
         if (!api.success) {
@@ -65,8 +65,7 @@ router.post('/quick-add', async (req, res) => {
             data: {
                 calendarId: "primary",
                 text: text.trim(),
-                sendNotifications: "false",
-                sendUpdates: "none"
+                sendNotifications: false
             }
         });
         if (!created.success) {
