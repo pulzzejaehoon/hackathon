@@ -14,8 +14,12 @@ import gmailConnectorRouter from './routes/connectors/gmail.js';
 import driveConnectorRouter from './routes/connectors/drive.js';
 import integrationsRouter from './routes/integrations.js';
 import calendarRouter from './routes/calendar.js';
+import gmailRouter from './routes/gmail.js';
+import driveRouter from './routes/drive.js';
+import briefingRouter from './routes/briefing.js';
 import chatbotRouter from './routes/chatbot.js';
 import mockOAuthRouter from './routes/mock-oauth.js';
+import interactorRouter from './routes/interactor.js';
 
 // Validate environment before starting server
 console.log('🚀 Starting AI Agent SaaS Server...\n');
@@ -65,11 +69,23 @@ app.use('/api/auth', authRouter);
 app.use('/api/auth', mockOAuthRouter); // Mock OAuth for development
 app.use('/api/chatbot', authMiddleware, chatbotRouter);
 
+// NEW: PRD-compliant Interactor Core (structured commands)
+app.use('/api/interactor', interactorRouter);
+
 // NEW: centralized integrations management
 app.use('/api/integrations', authMiddleware, integrationsRouter);
 
 // Calendar API functionality
 app.use('/api/calendar', authMiddleware, calendarRouter);
+
+// Gmail API functionality
+app.use('/api/gmail', authMiddleware, gmailRouter);
+
+// Google Drive API functionality
+app.use('/api/drive', authMiddleware, driveRouter);
+
+// Daily Briefing API functionality
+app.use('/api/briefing', authMiddleware, briefingRouter);
 
 // Legacy: individual connector routes (kept for backward compatibility)
 app.use('/api/connectors/googlecalendar', authMiddleware, googleCalendarConnectorRouter);

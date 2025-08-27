@@ -16,26 +16,40 @@ export async function interactorGet(path, params) {
 }
 export async function callInteractorApi(options) {
     try {
-        const { account, action, data } = options;
-        // New execute endpoint format: /connector/interactor/{connector}/action/{action}/execute
-        const path = `/connector/interactor/${action}/execute`;
+        const { account, connector, action, data } = options;
+        // Correct Interactor endpoint format: /connector/interactor/{connector}/action/{action}/execute
+        const path = `/connector/interactor/${connector}/action/${action}/execute`;
         const url = `${BASE}${path}?account=${encodeURIComponent(account)}`;
+        console.log(`[Interactor] Calling API:`, {
+            url,
+            connector,
+            action,
+            dataKeys: Object.keys(data)
+        });
         const response = await axios.post(url, data, {
             headers: { 'x-api-key': String(KEY), 'Content-Type': 'application/json' },
             timeout: 30000
         });
         const responseData = response.data;
-        // Interactor API responses often have a 'success' and 'output' field
+        // Interactor API responses structure handling
         if (responseData && (responseData.success !== false)) {
-            return { success: true, output: responseData.output || responseData };
+            return {
+                success: true,
+                output: responseData.output || responseData.body || responseData,
+                raw: responseData
+            };
         }
         else {
-            return { success: false, error: responseData.error || 'Unknown Interactor API error' };
+            return {
+                success: false,
+                error: responseData.error || responseData.message || 'Unknown Interactor API error',
+                raw: responseData
+            };
         }
     }
     catch (e) {
         const errorMsg = e.response?.data?.error || e.message || 'Interactor API call failed';
-        console.error(`[Interactor] API call failed for ${options.action}:`, errorMsg);
+        console.error(`[Interactor] API call failed for ${options.connector}/${options.action}:`, errorMsg);
         return { success: false, error: errorMsg };
     }
 }

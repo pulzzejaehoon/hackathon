@@ -14,6 +14,7 @@ import integrationsRouter from './routes/integrations.js';
 import calendarRouter from './routes/calendar.js';
 import chatbotRouter from './routes/chatbot.js';
 import mockOAuthRouter from './routes/mock-oauth.js';
+import interactorRouter from './routes/interactor.js';
 // Validate environment before starting server
 console.log('🚀 Starting AI Agent SaaS Server...\n');
 try {
@@ -57,6 +58,8 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRouter);
 app.use('/api/auth', mockOAuthRouter); // Mock OAuth for development
 app.use('/api/chatbot', authMiddleware, chatbotRouter);
+// NEW: PRD-compliant Interactor Core (structured commands)
+app.use('/api/interactor', interactorRouter);
 // NEW: centralized integrations management
 app.use('/api/integrations', authMiddleware, integrationsRouter);
 // Calendar API functionality

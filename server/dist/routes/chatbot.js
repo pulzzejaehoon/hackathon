@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { IntegrationService } from '../services/IntegrationService.js';
+import { InteractorCore } from '../lib/InteractorCore.js';
 import OpenAI from 'openai';
 import axios from 'axios';
 const router = Router();
@@ -233,8 +234,61 @@ router.post('/stream', async (req, res) => {
     }
 });
 /**
+ * POST /api/chatbot/command
+ * Handle structured commands via InteractorCore (PRD-compliant)
+ */
+router.post('/command', async (req, res) => {
+    try {
+        const { service, action, params } = req.body;
+        const userEmail = req.user?.email;
+        const userId = req.user?.userId?.toString();
+        if (!userEmail || !userId) {
+            return res.status(401).json({
+                ok: false,
+                error: { message: 'Unauthorized: missing user context' }
+            });
+        }
+        if (!service || !action) {
+            return res.status(400).json({
+                ok: false,
+                error: { message: 'Service and action are required' }
+            });
+        }
+        // Create structured command
+        const command = {
+            service,
+            action,
+            params: params || {},
+            userId: userEmail // Use email as userId for InteractorCore
+        };
+        console.log('[Chatbot Command] Processing structured command:', command);
+        // Process via InteractorCore
+        const result = await InteractorCore.processCommand(command);
+        if (!result.success) {
+            return res.status(502).json({
+                ok: false,
+                error: { message: result.error || 'Command failed' }
+            });
+        }
+        return res.json({
+            ok: true,
+            reply: {
+                content: result.message || 'Command completed successfully',
+                data: result.data
+            }
+        });
+    }
+    catch (error) {
+        console.error('[Chatbot Command] Error:', error);
+        return res.status(500).json({
+            ok: false,
+            error: { message: 'Internal server error' }
+        });
+    }
+});
+/**
  * POST /api/chatbot/action
- * Handle chatbot actions for integrated services
+ * Handle chatbot actions for integrated services (Legacy - kept for backward compatibility)
  */
 router.post('/action', async (req, res) => {
     try {
@@ -528,7 +582,7 @@ async function handleGmailAction(account, action, params) {
                 });
                 console.log(`[Gmail Draft Create] Message content:`, messageContent);
                 const response = await axios.post(url, {
-                    userId: account,
+                    userId: "me",
                     message: {
                         raw: messageBase64
                     }
@@ -562,7 +616,7 @@ async function handleGmailAction(account, action, params) {
                     q: 'in:inbox'
                 });
                 const response = await axios.post(url, {
-                    userId: account,
+                    userId: "me",
                     maxResults: 10,
                     q: 'in:inbox'
                 }, {
@@ -624,9 +678,9 @@ async function handleGmailAction(account, action, params) {
             case 'listLabels': {
                 const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/gmail-v1/action/gmail.users.labels.list/execute`;
                 console.log(`[Gmail Labels List] URL: ${url}?account=${account}`);
-                console.log(`[Gmail Labels List] Data:`, { userId: account });
+                console.log(`[Gmail Labels List] Data:`, { userId: "me" });
                 const response = await axios.post(url, {
-                    userId: account
+                    userId: "me"
                 }, {
                     params: { account },
                     headers: {
@@ -896,6 +950,87 @@ async function handleDriveAction(account, action, params) {
             success: true,
             content: `📁 Google Drive 작업 중 오류가 발생했습니다: ${error.message}`
         };
+    }
+}
+// Helper function to format action responses for chat display
+function formatActionResponse(action, data) {
+    try {
+        switch (action) {
+            case 'getTodaysEvents':
+            case 'listEvents': {
+                if (data.body?.items || data.output?.body?.items || data.items) {
+                    const items = data.body?.items || data.output?.body?.items || data.items || [];
+                    if (items.length === 0) {
+                        return '📅 오늘 예정된 일정이 없습니다.';
+                    }
+                    let content = '📅 오늘의 일정:\n\n';
+                    items.forEach((event, index) => {
+                        const title = event.summary || '제목 없음';
+                        const start = event.start?.dateTime || event.start?.date;
+                        const time = start ? new Date(start).toLocaleTimeString('ko-KR', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) : '';
+                        content += `${index + 1}. ${title}${time ? ` (${time})` : ''}\n`;
+                    });
+                    return content.trim();
+                }
+                break;
+            }
+            case 'listMessages': {
+                if (data.body?.messages || data.output?.body?.messages || data.messages) {
+                    const messages = data.body?.messages || data.output?.body?.messages || data.messages || [];
+                    if (messages.length === 0) {
+                        return '📧 받은편지함에 메시지가 없습니다.';
+                    }
+                    let content = '📧 최근 이메일:\n\n';
+                    messages.slice(0, 5).forEach((msg, index) => {
+                        const snippet = msg.snippet || '내용 없음';
+                        content += `${index + 1}. ${snippet.substring(0, 50)}${snippet.length > 50 ? '...' : ''}\n`;
+                    });
+                    return content.trim();
+                }
+                break;
+            }
+            case 'listLabels': {
+                if (data.body?.labels || data.output?.body?.labels || data.labels) {
+                    const labels = data.body?.labels || data.output?.body?.labels || data.labels || [];
+                    if (labels.length === 0) {
+                        return '📧 라벨이 없습니다.';
+                    }
+                    let content = '📧 Gmail 라벨:\n\n';
+                    labels.forEach((label, index) => {
+                        content += `${index + 1}. ${label.name || '이름 없음'}\n`;
+                    });
+                    return content.trim();
+                }
+                break;
+            }
+            case 'getRecentFiles':
+            case 'listFiles': {
+                if (data.body?.files || data.output?.body?.files || data.files) {
+                    const files = data.body?.files || data.output?.body?.files || data.files || [];
+                    if (files.length === 0) {
+                        return '📁 파일이 없습니다.';
+                    }
+                    let content = '📁 최근 파일:\n\n';
+                    files.forEach((file, index) => {
+                        const fileName = file.name || '이름 없음';
+                        const fileType = file.mimeType?.includes('folder') ? '📂' : '📄';
+                        content += `${fileType} ${index + 1}. ${fileName}\n`;
+                    });
+                    return content.trim();
+                }
+                break;
+            }
+            default:
+                return JSON.stringify(data, null, 2);
+        }
+        return 'Action completed successfully';
+    }
+    catch (error) {
+        console.error('[formatActionResponse] Error:', error);
+        return 'Response formatting failed';
     }
 }
 export default router;

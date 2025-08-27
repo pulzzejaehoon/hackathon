@@ -21,7 +21,8 @@ router.get('/list', async (req, res) => {
         }
         const api = await callInteractorApi({
             account,
-            action: 'googlecalendar-v1/action/calendar.calendarList.list',
+            connector: 'googlecalendar-v1',
+            action: 'calendar.calendarList.list',
             data: {
                 maxResults: 250,
                 showHidden: false
@@ -61,7 +62,8 @@ router.post('/quick-add', async (req, res) => {
         }
         const created = await callInteractorApi({
             account,
-            action: 'googlecalendar-v1/action/calendar.events.quickAdd',
+            connector: 'googlecalendar-v1',
+            action: 'calendar.events.quickAdd',
             data: {
                 calendarId: "primary",
                 text: text.trim(),

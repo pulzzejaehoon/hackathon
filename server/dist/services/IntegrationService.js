@@ -135,7 +135,7 @@ export class IntegrationService {
                     break;
                 case 'gmail':
                     url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.labels.list/execute`;
-                    data = { userId: userEmail.toLowerCase().trim() };
+                    data = { userId: "me" };
                     break;
                 case 'googledrive':
                     url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/drive.about.get/execute`;
