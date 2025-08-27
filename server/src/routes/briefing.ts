@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { callInteractorApi } from '../lib/interactor.js';
 import { IntegrationService } from '../services/IntegrationService.js';
+import { getKoreaTime } from '../utils/timezone.js';
 
 const router = Router();
 
@@ -20,8 +21,10 @@ router.get('/daily', async (req: Request, res: Response) => {
       IntegrationService.getStatus('googledrive', account)
     ]);
 
+    const koreaTime = getKoreaTime();
+    const koreaDateString = `${koreaTime.getFullYear()}-${String(koreaTime.getMonth() + 1).padStart(2, '0')}-${String(koreaTime.getDate()).padStart(2, '0')}`;
     const briefing: any = {
-      date: new Date().toISOString().split('T')[0],
+      date: koreaDateString,
       timestamp: new Date().toISOString(),
       services: {
         calendar: calendarStatus.connected,

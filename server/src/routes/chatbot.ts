@@ -4,6 +4,7 @@ import { IntegrationService } from '../services/IntegrationService.js';
 import { InteractorCore } from '../lib/InteractorCore.js';
 import OpenAI from 'openai';
 import axios from 'axios';
+import { formatKoreaDateTime, formatKoreaDate } from '../utils/timezone.js';
 
 const router = Router();
 
@@ -484,20 +485,9 @@ async function handleCalendarAction(account: string, action: string, params: any
         
         if (event.start) {
           if (event.start.dateTime) {
-            eventTime = new Date(event.start.dateTime).toLocaleString('ko-KR', {
-              year: 'numeric',
-              month: 'long', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'Asia/Seoul'
-            });
+            eventTime = formatKoreaDateTime(event.start.dateTime);
           } else if (event.start.date) {
-            eventTime = new Date(event.start.date + 'T00:00:00').toLocaleDateString('ko-KR', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            }) + ' (종일)';
+            eventTime = formatKoreaDate(event.start.date) + ' (종일)';
           }
         }
         
@@ -593,11 +583,7 @@ async function handleCalendarAction(account: string, action: string, params: any
           
           if (event.start) {
             if (event.start.dateTime) {
-              startTime = new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                timeZone: 'Asia/Seoul'
-              });
+              startTime = formatKoreaDateTime(event.start.dateTime).split(' ').slice(3).join(' '); // 시간 부분만
             } else if (event.start.date) {
               startTime = '종일';
             }
@@ -1218,10 +1204,7 @@ function formatActionResponse(action: string, data: any): string {
           items.forEach((event: any, index: number) => {
             const title = event.summary || '제목 없음';
             const start = event.start?.dateTime || event.start?.date;
-            const time = start ? new Date(start).toLocaleTimeString('ko-KR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            }) : '';
+            const time = start ? formatKoreaDateTime(start).split(' ').slice(3).join(' ') : ''; // 시간 부분만
             content += `${index + 1}. ${title}${time ? ` (${time})` : ''}\n`;
           });
           return content.trim();
@@ -1282,7 +1265,8 @@ function formatActionResponse(action: string, data: any): string {
       }
 
       default:
-        return JSON.stringify(data, null, 2);
+        // Fallback for unknown actions - return generic success message instead of JSON
+        return '작업이 완료되었습니다.';
     }
 
     return 'Action completed successfully';

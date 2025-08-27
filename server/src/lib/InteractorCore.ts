@@ -6,6 +6,7 @@ import { callInteractorApi } from './interactor.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getTodayStartKorea, getTodayEndKorea, formatKoreaDateTime, formatKoreaTime, formatKoreaDate } from '../utils/timezone.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -298,8 +299,8 @@ export class InteractorCore {
         action: 'list_events',
         defaultParams: {
           calendarId: 'primary',
-          timeMin: new Date().toISOString().split('T')[0] + 'T00:00:00.000Z',
-          timeMax: new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0] + 'T23:59:59.000Z',
+          timeMin: getTodayStartKorea(),
+          timeMax: getTodayEndKorea(),
           singleEvents: true,
           orderBy: 'startTime'
         }
@@ -418,6 +419,31 @@ export class InteractorCore {
   /**
    * Formats raw API response data into user-friendly messages
    */
+  /**
+   * Public format response method (for external use)
+   */
+  static formatResponse(action: string, data: any, integrationId?: string): string {
+    try {
+      // If integrationId not provided, try to infer from action pattern
+      if (!integrationId) {
+        if (action.includes('event') || action.includes('calendar')) {
+          integrationId = 'googlecalendar';
+        } else if (action.includes('message') || action.includes('gmail')) {
+          integrationId = 'gmail';
+        } else if (action.includes('file') || action.includes('drive')) {
+          integrationId = 'googledrive';
+        } else if (action.includes('slack') || action.includes('channel')) {
+          integrationId = 'slack';
+        }
+      }
+
+      return this.formatApiResponseToUserFriendly(action, data, integrationId || 'unknown');
+    } catch (error) {
+      console.error(`[InteractorCore] Format error for ${action}:`, error);
+      return '작업이 완료되었습니다.';
+    }
+  }
+
   private static formatApiResponseToUserFriendly(
     action: string,
     data: any,
@@ -474,12 +500,7 @@ export class InteractorCore {
           
           if (event.start) {
             if (event.start.dateTime) {
-              const startTime = new Date(event.start.dateTime);
-              time = startTime.toLocaleTimeString('ko-KR', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                timeZone: 'Asia/Seoul'
-              });
+              time = formatKoreaTime(event.start.dateTime);
             } else if (event.start.date) {
               time = '종일';
             }
@@ -511,20 +532,9 @@ export class InteractorCore {
         
         if (event?.start) {
           if (event.start.dateTime) {
-            time = new Date(event.start.dateTime).toLocaleString('ko-KR', {
-              year: 'numeric',
-              month: 'long', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'Asia/Seoul'
-            });
+            time = formatKoreaDateTime(event.start.dateTime);
           } else if (event.start.date) {
-            time = new Date(event.start.date + 'T00:00:00').toLocaleDateString('ko-KR', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            }) + ' (종일)';
+            time = formatKoreaDate(event.start.date) + ' (종일)';
           }
         }
 
@@ -715,7 +725,7 @@ export class InteractorCore {
 
         if (result?.ok || result?.scheduled_message_id) {
           const scheduleTime = result.post_at 
-            ? new Date(result.post_at * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+            ? formatKoreaDateTime(new Date(result.post_at * 1000))
             : '예약 시간 미정';
           
           return `💬 **Slack 메시지가 예약되었습니다!**\n\n📋 **채널:** ${result.channel || '알 수 없음'}\n⏰ **전송 시간:** ${scheduleTime}`;
