@@ -8,46 +8,89 @@ const openai = new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
     baseURL: process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1'
 });
-// Smart chat function - Pure conversational responses
+// Smart chat function - Real LLM integration with OpenRouter
 async function getSmartResponse(messages, account) {
+    // Check if OpenRouter API key is available
+    if (!process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY === 'your-openrouter-api-key-here') {
+        console.warn('[LLM] OpenRouter API key not configured, using fallback responses');
+        return getFallbackResponse(messages);
+    }
+    try {
+        // Prepare system message for context
+        const systemMessage = {
+            role: 'system',
+            content: `당신은 Interactor Office AI 어시스턴트입니다. 사용자의 업무 효율성을 높이는 것이 목표입니다.
+
+주요 기능:
+- Google Calendar 연동 (일정 조회/생성)
+- Gmail 연동 (메일 관리)
+- Google Drive 연동 (파일 관리)
+
+응답 가이드라인:
+- 친근하고 도움이 되는 톤으로 답변
+- 한국어로 자연스럽게 대화
+- 구체적이고 실용적인 도움 제공
+- 필요하면 아래 퀵 액션 버튼 활용을 권장
+- 답변은 간결하게 2-3문장 내외로 작성`
+        };
+        // Prepare messages array with system message
+        const chatMessages = [systemMessage, ...messages];
+        console.log('[LLM] Calling OpenRouter API with messages:', chatMessages.length);
+        // Call OpenAI/OpenRouter API
+        const completion = await openai.chat.completions.create({
+            model: process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct:free',
+            messages: chatMessages,
+            max_tokens: 500,
+            temperature: 0.7,
+            top_p: 0.9,
+        });
+        const response = completion.choices[0]?.message?.content;
+        if (!response) {
+            console.warn('[LLM] Empty response from OpenRouter, using fallback');
+            return getFallbackResponse(messages);
+        }
+        console.log('[LLM] Successfully got response from OpenRouter');
+        return response.trim();
+    }
+    catch (error) {
+        console.error('[LLM] OpenRouter API error:', error.message);
+        // Check for specific error types
+        if (error.status === 401) {
+            console.error('[LLM] Authentication error - check API key');
+        }
+        else if (error.status === 429) {
+            console.error('[LLM] Rate limit exceeded');
+        }
+        else if (error.status >= 500) {
+            console.error('[LLM] OpenRouter server error');
+        }
+        return getFallbackResponse(messages);
+    }
+}
+// Fallback response system for when LLM is unavailable
+function getFallbackResponse(messages) {
     const lastMessage = messages[messages.length - 1]?.content || '';
-    // Generate natural conversational responses
+    // Smart keyword-based responses as fallback
     const responses = [
         // Greetings
         { keywords: ['안녕', 'hello', 'hi', '하이'], responses: [
-                '안녕하세요! 오늘 하루는 어떠세요?',
-                '안녕하세요! 무엇을 도와드릴까요?',
-                '반가워요! 좋은 하루 보내고 계신가요?'
+                '안녕하세요! 무엇을 도와드릴까요? 📝',
+                '반가워요! 오늘도 좋은 하루 보내세요! ✨'
             ] },
-        // Questions about work/productivity
-        { keywords: ['일', '작업', '업무', 'work'], responses: [
-                '오늘 어떤 일을 하고 계신가요? 도움이 필요하시면 언제든 말씀해주세요!',
-                '업무가 많으시군요! 스케줄 관리나 일정 정리가 필요하시면 아래 퀵 액션 버튼을 활용해보세요.',
-                '일하시느라 고생 많으세요. 무엇인가 정리하거나 관리할 것이 있으시면 도와드릴게요!'
+        // Questions about coding/technical
+        { keywords: ['코드', 'code', '프로그래밍', 'programming', '개발', 'python', 'javascript'], responses: [
+                '죄송하지만 현재 AI 모델에 연결할 수 없어 코딩 관련 도움을 드리기 어렵습니다. 잠시 후 다시 시도해주세요.',
+                '기술적인 질문은 AI 모델이 필요한데, 현재 연결에 문제가 있네요. 다시 시도해보시겠어요?'
             ] },
         // Calendar/schedule related
         { keywords: ['일정', '캘린더', '스케줄', '약속'], responses: [
-                '일정 관리는 정말 중요하죠! 아래 캘린더 버튼을 사용해서 오늘 일정을 확인하거나 새로운 일정을 추가해보세요.',
-                '스케줄이 복잡하실 것 같네요. 캘린더 연동이 되어 있다면 빠른 액션으로 쉽게 관리할 수 있어요!',
-                '약속이나 일정이 많으시군요! 구글 캘린더와 연동해서 더 편리하게 관리해보시는 건 어떨까요?'
+                '일정 관리가 필요하시군요! 아래 캘린더 버튼으로 일정을 확인하거나 추가해보세요! 📅',
+                '스케줄 관리는 Google 캘린더 연동 기능을 활용해보세요! 🗓️'
             ] },
         // Email related  
         { keywords: ['메일', '이메일', 'email', 'gmail'], responses: [
-                '이메일 관리도 업무에서 중요한 부분이죠. Gmail 기능은 곧 추가될 예정이니 조금만 기다려주세요!',
-                '메일함이 복잡하시나봐요. 곧 Gmail 연동 기능을 추가해서 더 편리하게 관리할 수 있도록 할게요.',
-                '이메일 확인하시느라 바쁘시겠네요! Gmail 기능은 개발 중이에요.'
-            ] },
-        // General conversation
-        { keywords: ['어떻게', '뭐', '무엇', '어디', '언제', '왜'], responses: [
-                '궁금한 게 있으시군요! 구체적으로 어떤 도움이 필요하신지 말씀해주시면 더 잘 도와드릴 수 있어요.',
-                '질문이 있으시네요. 서비스 연동이나 일정 관리 등 필요한 기능이 있으시면 알려주세요!',
-                '더 자세히 설명해주시면 맞춤형으로 도움을 드릴 수 있을 것 같아요.'
-            ] },
-        // Positive responses
-        { keywords: ['좋아', '감사', '고마워', '최고', '훌륭'], responses: [
-                '기뻐해주셔서 감사해요! 더 도움이 필요하시면 언제든 말씀해주세요.',
-                '칭찬해주셔서 고맙습니다! 앞으로도 더 나은 서비스로 도움드리겠어요.',
-                '만족해주셔서 다행이에요! 계속해서 유용한 기능들을 제공해드릴게요.'
+                '이메일 관리는 Gmail 연동 기능을 사용해보세요! 📧',
+                '메일 관련 작업은 아래 Gmail 버튼을 활용해보시는 건 어떨까요? ✉️'
             ] }
     ];
     // Find matching response
@@ -57,13 +100,11 @@ async function getSmartResponse(messages, account) {
             return randomResponse;
         }
     }
-    // Default conversational responses
+    // Default responses
     const defaultResponses = [
-        '흥미로운 이야기네요! 더 자세히 들려주세요.',
-        '그렇군요! 제가 어떻게 도와드릴까요?',
-        '말씀해주셔서 감사해요. 다른 도움이 필요한 것은 없나요?',
-        '이해했어요. 필요한 기능이나 도움이 있으시면 아래 버튼들을 활용해보세요!',
-        '좋은 생각이네요! 무엇인가 더 도움드릴 것이 있을까요?'
+        '현재 AI 모델 연결에 문제가 있어 자세한 답변을 드리기 어렵습니다. 아래 퀵 액션 버튼들을 활용해보세요!',
+        '죄송합니다. AI 서비스가 일시적으로 불안정합니다. 통합된 서비스 기능들을 대신 이용해보시겠어요?',
+        'AI 응답 생성에 문제가 발생했습니다. 캘린더나 Gmail 등의 연동 기능은 정상 작동합니다! 🔧'
     ];
     return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
 }
@@ -120,16 +161,70 @@ router.post('/stream', async (req, res) => {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization'
         });
-        // Get smart response
-        const response = await getSmartResponse(messages, account);
-        // Simulate streaming by chunking the response
-        for (let i = 0; i < response.length; i += 3) {
-            const chunk = response.slice(i, i + 3);
-            res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
-            await new Promise(resolve => setTimeout(resolve, 30));
+        try {
+            // Try real streaming if OpenRouter API key is available
+            if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your-openrouter-api-key-here') {
+                const systemMessage = {
+                    role: 'system',
+                    content: `당신은 Interactor Office AI 어시스턴트입니다. 사용자의 업무 효율성을 높이는 것이 목표입니다.
+
+주요 기능:
+- Google Calendar 연동 (일정 조회/생성)
+- Gmail 연동 (메일 관리)
+- Google Drive 연동 (파일 관리)
+
+응답 가이드라인:
+- 친근하고 도움이 되는 톤으로 답변
+- 한국어로 자연스럽게 대화
+- 구체적이고 실용적인 도움 제공
+- 필요하면 아래 퀵 액션 버튼 활용을 권장
+- 답변은 간결하게 2-3문장 내외로 작성`
+                };
+                const chatMessages = [systemMessage, ...messages];
+                console.log('[LLM Stream] Calling OpenRouter streaming API');
+                const stream = await openai.chat.completions.create({
+                    model: process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct:free',
+                    messages: chatMessages,
+                    max_tokens: 500,
+                    temperature: 0.7,
+                    top_p: 0.9,
+                    stream: true
+                });
+                for await (const chunk of stream) {
+                    const content = chunk.choices[0]?.delta?.content || '';
+                    if (content) {
+                        res.write(`data: ${JSON.stringify({ delta: content })}\n\n`);
+                    }
+                }
+                res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+                res.end();
+            }
+            else {
+                // Fallback to simulated streaming
+                console.log('[LLM Stream] Using fallback streaming');
+                const response = await getSmartResponse(messages, account);
+                // Simulate streaming by chunking the response
+                for (let i = 0; i < response.length; i += 3) {
+                    const chunk = response.slice(i, i + 3);
+                    res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+                res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+                res.end();
+            }
         }
-        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-        res.end();
+        catch (streamError) {
+            console.error('[LLM Stream] Streaming error:', streamError.message);
+            // Fallback to regular response and simulate streaming
+            const response = getFallbackResponse(messages);
+            for (let i = 0; i < response.length; i += 3) {
+                const chunk = response.slice(i, i + 3);
+                res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+        }
     }
     catch (error) {
         console.error('[Chatbot Stream] Error:', error);
@@ -419,23 +514,23 @@ async function handleGmailAction(account, action, params) {
                         content: '📧 받는 사람과 제목을 입력해주세요.'
                     };
                 }
-                // Create Gmail draft using Interactor API
+                // Create Gmail draft using Interactor API with correct format
                 const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/gmail-v1/action/gmail.users.drafts.create/execute`;
+                // Create proper Gmail message format
+                const messageContent = `To: ${to}\r\nSubject: ${subject}\r\n\r\n${body || ''}`;
+                const messageBase64 = Buffer.from(messageContent).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
                 console.log(`[Gmail Draft Create] URL: ${url}?account=${account}`);
                 console.log(`[Gmail Draft Create] Data:`, {
                     userId: account,
                     message: {
-                        to: [to],
-                        subject: subject,
-                        textBody: body || ''
+                        raw: messageBase64
                     }
                 });
+                console.log(`[Gmail Draft Create] Message content:`, messageContent);
                 const response = await axios.post(url, {
                     userId: account,
                     message: {
-                        to: [to],
-                        subject: subject,
-                        textBody: body || ''
+                        raw: messageBase64
                     }
                 }, {
                     params: { account },
@@ -594,16 +689,213 @@ async function handleGmailAction(account, action, params) {
     }
 }
 async function handleDriveAction(account, action, params) {
+    console.log(`[Drive Action] account: ${account}, action: ${action}, params:`, params);
     const status = await IntegrationService.getStatus('googledrive', account);
+    console.log(`[Drive Action] Status check result:`, status);
     if (!status.connected) {
         return {
             success: true,
             content: '📁 Google Drive가 연결되어 있지 않습니다. 먼저 설정에서 연결해주세요!'
         };
     }
-    return {
-        success: true,
-        content: '📁 Google Drive 기능은 곧 추가될 예정입니다!'
-    };
+    try {
+        switch (action) {
+            case 'listFiles': {
+                // List files in Google Drive
+                const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/googledrive-v1/action/drive.files.list/execute`;
+                console.log(`[Drive Files List] URL: ${url}?account=${account}`);
+                console.log(`[Drive Files List] Data:`, {
+                    pageSize: 10,
+                    q: "trashed=false",
+                    fields: "files(id,name,mimeType,size,modifiedTime)"
+                });
+                const response = await axios.post(url, {
+                    pageSize: 10,
+                    q: "trashed=false",
+                    fields: "files(id,name,mimeType,size,modifiedTime)"
+                }, {
+                    params: { account },
+                    headers: {
+                        'x-api-key': String(process.env.INTERACTOR_API_KEY),
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10000
+                });
+                console.log(`[Drive Files List] Response:`, JSON.stringify(response.data, null, 2));
+                if (!response.data || response.data.error) {
+                    return {
+                        success: true,
+                        content: `📁 파일 목록을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+                    };
+                }
+                // Handle multiple possible response structures
+                let files = [];
+                if (response.data.body?.files) {
+                    files = response.data.body.files;
+                }
+                else if (response.data.output?.body?.files) {
+                    files = response.data.output.body.files;
+                }
+                else if (response.data.output?.files) {
+                    files = response.data.output.files;
+                }
+                else if (response.data.files) {
+                    files = response.data.files;
+                }
+                console.log(`[Drive Files List] Extracted ${files.length} files`);
+                if (!files || files.length === 0) {
+                    return {
+                        success: true,
+                        content: '📁 Google Drive에 파일이 없습니다.'
+                    };
+                }
+                let content = '📁 Google Drive 파일 목록:\n\n';
+                files.slice(0, 8).forEach((file, index) => {
+                    const fileName = file.name || '이름 없음';
+                    const fileSize = file.size ? `(${Math.round(file.size / 1024)}KB)` : '';
+                    const fileType = file.mimeType?.includes('folder') ? '📂' : '📄';
+                    content += `${fileType} ${index + 1}. ${fileName} ${fileSize}\n`;
+                });
+                if (files.length > 8) {
+                    content += `\n... 그 외 ${files.length - 8}개 파일이 더 있습니다.`;
+                }
+                return {
+                    success: true,
+                    content: content.trim()
+                };
+            }
+            case 'createFolder': {
+                const folderName = params?.name || params?.folderName;
+                if (!folderName) {
+                    return {
+                        success: true,
+                        content: '📁 생성할 폴더 이름을 입력해주세요.'
+                    };
+                }
+                const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/googledrive-v1/action/drive.files.create/execute`;
+                console.log(`[Drive Create Folder] URL: ${url}?account=${account}`);
+                console.log(`[Drive Create Folder] Data:`, {
+                    name: folderName.trim(),
+                    mimeType: 'application/vnd.google-apps.folder'
+                });
+                const response = await axios.post(url, {
+                    name: folderName.trim(),
+                    mimeType: 'application/vnd.google-apps.folder'
+                }, {
+                    params: { account },
+                    headers: {
+                        'x-api-key': String(process.env.INTERACTOR_API_KEY),
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10000
+                });
+                console.log(`[Drive Create Folder] Response:`, JSON.stringify(response.data, null, 2));
+                if (!response.data || response.data.error) {
+                    return {
+                        success: true,
+                        content: `📁 폴더 생성에 실패했습니다: ${response.data?.error || 'API 오류'}`
+                    };
+                }
+                // Handle multiple possible response structures
+                let folder = null;
+                if (response.data.body) {
+                    folder = response.data.body;
+                }
+                else if (response.data.output?.body) {
+                    folder = response.data.output.body;
+                }
+                else if (response.data.output) {
+                    folder = response.data.output;
+                }
+                else {
+                    folder = response.data;
+                }
+                const folderCreatedName = folder?.name || folderName;
+                return {
+                    success: true,
+                    content: `📁 폴더 "${folderCreatedName}"가 성공적으로 생성되었습니다!`
+                };
+            }
+            case 'searchFiles': {
+                const query = params?.query || params?.q;
+                if (!query) {
+                    return {
+                        success: true,
+                        content: '📁 검색할 파일명이나 키워드를 입력해주세요.'
+                    };
+                }
+                const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/googledrive-v1/action/drive.files.list/execute`;
+                console.log(`[Drive Search Files] URL: ${url}?account=${account}`);
+                console.log(`[Drive Search Files] Data:`, {
+                    pageSize: 10,
+                    q: `name contains '${query}' and trashed=false`,
+                    fields: "files(id,name,mimeType,size,webViewLink)"
+                });
+                const response = await axios.post(url, {
+                    pageSize: 10,
+                    q: `name contains '${query}' and trashed=false`,
+                    fields: "files(id,name,mimeType,size,webViewLink)"
+                }, {
+                    params: { account },
+                    headers: {
+                        'x-api-key': String(process.env.INTERACTOR_API_KEY),
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10000
+                });
+                console.log(`[Drive Search Files] Response:`, JSON.stringify(response.data, null, 2));
+                if (!response.data || response.data.error) {
+                    return {
+                        success: true,
+                        content: `📁 파일 검색에 실패했습니다: ${response.data?.error || 'API 오류'}`
+                    };
+                }
+                // Handle multiple possible response structures
+                let files = [];
+                if (response.data.body?.files) {
+                    files = response.data.body.files;
+                }
+                else if (response.data.output?.body?.files) {
+                    files = response.data.output.body.files;
+                }
+                else if (response.data.output?.files) {
+                    files = response.data.output.files;
+                }
+                else if (response.data.files) {
+                    files = response.data.files;
+                }
+                console.log(`[Drive Search Files] Found ${files.length} files matching "${query}"`);
+                if (!files || files.length === 0) {
+                    return {
+                        success: true,
+                        content: `📁 "${query}"와 관련된 파일을 찾을 수 없습니다.`
+                    };
+                }
+                let content = `📁 "${query}" 검색 결과:\n\n`;
+                files.forEach((file, index) => {
+                    const fileName = file.name || '이름 없음';
+                    const fileSize = file.size ? `(${Math.round(file.size / 1024)}KB)` : '';
+                    const fileType = file.mimeType?.includes('folder') ? '📂' : '📄';
+                    content += `${fileType} ${index + 1}. ${fileName} ${fileSize}\n`;
+                });
+                return {
+                    success: true,
+                    content: content.trim()
+                };
+            }
+            default:
+                return {
+                    success: true,
+                    content: `📁 알 수 없는 Google Drive 액션: ${action}\n\n사용 가능한 액션:\n- 파일 목록 보기\n- 폴더 생성\n- 파일 검색`
+                };
+        }
+    }
+    catch (error) {
+        console.error(`[Drive Action] Error:`, error);
+        return {
+            success: true,
+            content: `📁 Google Drive 작업 중 오류가 발생했습니다: ${error.message}`
+        };
+    }
 }
 export default router;

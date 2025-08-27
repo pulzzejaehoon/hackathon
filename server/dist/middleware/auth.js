@@ -1,7 +1,9 @@
 import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-    console.warn('[Auth] Missing JWT_SECRET. Set it in your server environment.');
+    console.error('[Auth] CRITICAL: Missing JWT_SECRET. Set it in your server environment.');
+    console.error('[Auth] Application security is compromised without a proper JWT secret.');
+    process.exit(1);
 }
 export const authMiddleware = (req, res, next) => {
     try {

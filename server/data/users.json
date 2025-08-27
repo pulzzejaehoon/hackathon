@@ -10,7 +10,7 @@
       "email": "jaehoon@interactor.com",
       "password_hash": "$2b$12$EHv/MPpE5cFjOu3Ta8bX9.EBVXaE2VTxPrVDqSYiV0G5f3GlC3lUK",
       "created_at": "2025-08-26T11:16:00.000Z",
-      "last_login": "2025-08-26T11:44:08.633Z"
+      "last_login": "2025-08-26T11:54:34.240Z"
     },
     {
       "id": 3,
@@ -46,7 +46,14 @@
       "password_hash": "$2b$12$oWKvtSUFsMXNTI7A7Dx6N.ImVcnpbSs1Ckf1jRnoR9S2DysJaMnYW",
       "created_at": "2025-08-26T11:42:25.276Z",
       "last_login": null
+    },
+    {
+      "id": 8,
+      "email": "drivetest@example.com",
+      "password_hash": "$2b$12$sF8/DVh6NOuO1vlSa3KcpuNW2r5/IbzaOUTdplILTlNvG6Dm0lehe",
+      "created_at": "2025-08-26T12:37:54.315Z",
+      "last_login": null
     }
   ],
-  "lastId": 7
+  "lastId": 8
 }
