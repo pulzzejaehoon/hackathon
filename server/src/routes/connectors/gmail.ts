@@ -148,22 +148,103 @@ router.get('/callback', async (req: Request, res: Response) => {
     `);
   }
 
-  // Successful connection
-  return res.send(`
-    <html>
-      <head><title>Gmail Connection Success</title></head>
-      <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
-        <div style="text-align: center; padding: 20px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0;">
-          <h2 style="color: #059669; margin-bottom: 16px;">✅ Connected!</h2>
-          <p style="color: #059669; margin-bottom: 16px;">Gmail이 성공적으로 연결되었습니다.</p>
-          <script>
-            window.opener?.postMessage({ type: 'gmail_auth_success' }, '*');
-            window.close();
-          </script>
-        </div>
-      </body>
-    </html>
-  `);
+  try {
+    const account = (req as any).user?.email;
+    if (!account) {
+      console.error('[Gmail Callback] Unauthorized: missing user context');
+      return res.send(`
+        <html>
+          <head><title>Gmail Connection Error</title></head>
+          <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+            <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
+              <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
+              <p style="color: #dc2626; margin-bottom: 16px;">사용자 정보가 없습니다.</p>
+              <script>
+                window.opener?.postMessage({ type: 'gmail_auth_error', error: 'Unauthorized' }, '*');
+                window.close();
+              </script>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
+    // Exchange code for token with Interactor
+    const tokenExchangeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/gmail-v1/execute`;
+    const tokenExchangeResp = await axios.post(tokenExchangeUrl, {
+      action: 'token',
+      code: code,
+      account: account,
+      redirect_uri: `${process.env.BACKEND_ORIGIN}/api/connectors/gmail/callback`
+    }, {
+      headers: {
+        'x-api-key': String(INTERACTOR_API_KEY),
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+
+    const tokenData = tokenExchangeResp.data;
+    console.log('[Gmail Callback] Token Exchange Response:', tokenData);
+
+    if (!tokenData.ok) {
+      console.error('[Gmail Callback] Token exchange failed:', tokenData.error || 'Unknown error');
+      return res.send(`
+        <html>
+          <head><title>Gmail Connection Error</title></head>
+          <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+            <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
+              <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
+              <p style="color: #dc2626; margin-bottom: 16px;">${tokenData.error || 'Unknown error'}</p>
+              <script>
+                window.opener?.postMessage({ type: 'gmail_auth_error', error: '${tokenData.error || 'Token exchange failed'}' }, '*');
+                window.close();
+              </script>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
+    // Token is now stored and managed by Interactor
+    console.log(`[Gmail Callback] OAuth completed successfully for ${account}`);
+
+    // Successful connection
+    return res.send(`
+      <html>
+        <head><title>Gmail Connection Success</title></head>
+        <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+          <div style="text-align: center; padding: 20px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0;">
+            <h2 style="color: #059669; margin-bottom: 16px;">✅ Connected!</h2>
+            <p style="color: #059669; margin-bottom: 16px;">Gmail이 성공적으로 연결되었습니다.</p>
+            <script>
+              window.opener?.postMessage({ type: 'gmail_auth_success' }, '*');
+              window.close();
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+
+  } catch (err: any) {
+    console.error('[Gmail Callback] Token exchange error:', err);
+    const errorMessage = err?.response?.data?.message || err?.message || 'Server error during token exchange';
+    return res.send(`
+      <html>
+        <head><title>Gmail Connection Error</title></head>
+        <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+          <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
+            <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
+            <p style="color: #dc2626; margin-bottom: 16px;">${errorMessage}</p>
+            <script>
+              window.opener?.postMessage({ type: 'gmail_auth_error', error: '${errorMessage}' }, '*');
+              window.close();
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+  }
 });
 
 export default router;

@@ -1,1 +1,8 @@
 .env
+
+# Gemini-added ignores
+server/dist
+server/data
+.claude
+server.err.log
+server.log

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { TokenManager } from '../services/TokenManager.js';
 
 const router = Router();
 
@@ -78,18 +79,38 @@ router.get('/mock-oauth/:service', (req: Request, res: Response) => {
         <button onclick="simulateError()">❌ 연동 실패 시뮬레이션</button>
         
         <script>
-          function simulateSuccess() {
-            // 부모 창에 성공 메시지 전송
-            if (window.opener) {
-              window.opener.postMessage({
-                type: 'OAUTH_SUCCESS',
-                service: '${service}',
-                account: '${account}',
-                mock: true
-              }, '*');
-              window.close();
-            } else {
-              alert('연동 성공 시뮬레이션 완료! (팝업 모드가 아님)');
+          async function simulateSuccess() {
+            try {
+              // Mock 토큰을 서버에 저장
+              const response = await fetch('/api/auth/mock-token-store', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  service: '${service}',
+                  account: '${account}'
+                })
+              });
+
+              if (response.ok) {
+                // 부모 창에 성공 메시지 전송
+                if (window.opener) {
+                  window.opener.postMessage({
+                    type: 'OAUTH_SUCCESS',
+                    service: '${service}',
+                    account: '${account}',
+                    mock: true
+                  }, '*');
+                  window.close();
+                } else {
+                  alert('연동 성공 시뮬레이션 완료! (팝업 모드가 아님)');
+                }
+              } else {
+                throw new Error('토큰 저장 실패');
+              }
+            } catch (error) {
+              alert('연동 중 오류 발생: ' + error.message);
             }
           }
           
@@ -111,6 +132,91 @@ router.get('/mock-oauth/:service', (req: Request, res: Response) => {
     </body>
     </html>
   `);
+});
+
+/**
+ * GET /api/auth/token-debug
+ * Debug endpoint to view stored tokens (development only)
+ */
+router.get('/token-debug', async (req: Request, res: Response) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ 
+        ok: false, 
+        error: 'Debug endpoint not available in production' 
+      });
+    }
+
+    const [debugInfo, stats] = await Promise.all([
+      TokenManager.getDebugInfo(),
+      TokenManager.getStats()
+    ]);
+
+    return res.json({ 
+      ok: true,
+      stats,
+      tokens: debugInfo
+    });
+
+  } catch (error: any) {
+    console.error('[TokenDebug] Error:', error);
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to get debug info' 
+    });
+  }
+});
+
+/**
+ * POST /api/auth/mock-token-store  
+ * Store mock OAuth token for development/testing (Admin only)
+ */
+router.post('/mock-token-store', async (req: Request, res: Response) => {
+  try {
+    const { service, account } = req.body;
+
+    if (!service || !account) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'Service and account are required' 
+      });
+    }
+
+    // Only allow in development mode
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({
+        ok: false,
+        error: 'Mock token storage not available in production'
+      });
+    }
+
+    // Generate mock token with reasonable expiry
+    const mockToken = {
+      accessToken: `mock_access_token_${service}_${Date.now()}`,
+      refreshToken: `mock_refresh_token_${service}_${Date.now()}`,
+      expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours from now
+      scope: `mock_scope_${service}`,
+      tokenType: 'Bearer'
+    };
+
+    // Store the mock token
+    await TokenManager.storeToken(account, service, mockToken);
+
+    console.log(`[MockOAuth] Stored mock token for ${account}:${service}`);
+
+    return res.json({ 
+      ok: true, 
+      message: `Mock token stored for ${service}`,
+      mock: true 
+    });
+
+  } catch (error: any) {
+    console.error('[MockOAuth] Error storing mock token:', error);
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Failed to store mock token' 
+    });
+  }
 });
 
 export default router;

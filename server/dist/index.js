@@ -12,6 +12,9 @@ import gmailConnectorRouter from './routes/connectors/gmail.js';
 import driveConnectorRouter from './routes/connectors/drive.js';
 import integrationsRouter from './routes/integrations.js';
 import calendarRouter from './routes/calendar.js';
+import gmailRouter from './routes/gmail.js';
+import driveRouter from './routes/drive.js';
+import briefingRouter from './routes/briefing.js';
 import chatbotRouter from './routes/chatbot.js';
 import mockOAuthRouter from './routes/mock-oauth.js';
 import interactorRouter from './routes/interactor.js';
@@ -64,6 +67,12 @@ app.use('/api/interactor', interactorRouter);
 app.use('/api/integrations', authMiddleware, integrationsRouter);
 // Calendar API functionality
 app.use('/api/calendar', authMiddleware, calendarRouter);
+// Gmail API functionality
+app.use('/api/gmail', authMiddleware, gmailRouter);
+// Google Drive API functionality
+app.use('/api/drive', authMiddleware, driveRouter);
+// Daily Briefing API functionality
+app.use('/api/briefing', authMiddleware, briefingRouter);
 // Legacy: individual connector routes (kept for backward compatibility)
 app.use('/api/connectors/googlecalendar', authMiddleware, googleCalendarConnectorRouter);
 app.use('/api/connectors/gmail', authMiddleware, gmailConnectorRouter);

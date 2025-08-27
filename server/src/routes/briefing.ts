@@ -20,7 +20,7 @@ router.get('/daily', async (req: Request, res: Response) => {
       IntegrationService.getStatus('googledrive', account)
     ]);
 
-    const briefing = {
+    const briefing: any = {
       date: new Date().toISOString().split('T')[0],
       timestamp: new Date().toISOString(),
       services: {
@@ -29,12 +29,12 @@ router.get('/daily', async (req: Request, res: Response) => {
         drive: driveStatus.connected
       },
       summary: {
-        calendar: null,
-        gmail: null,
-        drive: null
+        calendar: null as any,
+        gmail: null as any,
+        drive: null as any
       },
-      suggestions: [],
-      notifications: []
+      suggestions: [] as string[],
+      notifications: [] as any[]
     };
 
     // Fetch Calendar data if connected
@@ -120,7 +120,7 @@ async function getCalendarSummary(account: string) {
       todayEvents: events.length,
       nextEvent,
       freeTimeBlocks,
-      events: events.slice(0, 5).map(event => ({
+      events: events.slice(0, 5).map((event: any) => ({
         title: event.summary || '제목 없음',
         time: event.start?.dateTime ? 
           new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { 
@@ -234,8 +234,8 @@ function calculateFreeTime(events: any[], dayStart: Date, dayEnd: Date) {
   currentTime.setHours(9, 0, 0, 0); // Start checking from 9 AM
 
   for (const event of sortedEvents) {
-    const eventStart = new Date(event.start.dateTime);
-    const eventEnd = new Date(event.end?.dateTime || event.start.dateTime);
+    const eventStart = new Date((event as any).start.dateTime);
+    const eventEnd = new Date((event as any).end?.dateTime || (event as any).start.dateTime);
 
     // If there's a gap between current time and event start
     if (eventStart > currentTime) {

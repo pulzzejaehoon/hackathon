@@ -32,7 +32,12 @@
       "Read(/Users/hoon/Downloads/**)",
       "Read(/Users/hoon/Downloads/**)",
       "Read(/Users/hoon/Downloads/**)",
-      "Read(/Users/hoon/Downloads/**)"
+      "Read(/Users/hoon/Downloads/**)",
+      "Bash(PORT=3003 node dist/index.js)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(source .env)"
     ],
     "deny": [],
     "ask": []

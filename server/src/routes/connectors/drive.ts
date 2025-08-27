@@ -148,8 +148,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/drive/settings?status=error&message=${encodeURIComponent(tokenData.error || 'Token exchange failed')}`);
     }
 
-    // TODO: Store tokenData (access_token, refresh_token, etc.) securely in your database
-    // For now, we'll just redirect to success.
+    // Token is now stored and managed by Interactor
+    console.log(`[Drive Callback] OAuth completed successfully for ${account}`);
 
     return res.redirect(`${process.env.FRONTEND_ORIGIN}/integrations/drive/settings?status=success`);
 

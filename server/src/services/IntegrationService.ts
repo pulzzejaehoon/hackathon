@@ -67,6 +67,14 @@ export class IntegrationService {
       interactorConnectorName: 'googledrive-v1',
       category: 'storage',
       icon: '📁'
+    }],
+    ['slack', {
+      id: 'slack',
+      name: 'Slack',
+      description: 'Send messages and manage Slack communications',
+      interactorConnectorName: 'slack-v1',
+      category: 'communication',
+      icon: '💬'
     }]
   ]);
 
@@ -147,13 +155,14 @@ export class IntegrationService {
       return { ok: true, connected: false }; // Don't error, just show as disconnected
     }
 
-    // Check cache first
+    // Check integration status normally  
     const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
-    const cached = this.statusCache.get(cacheKey);
     const now = Date.now();
     
+    // Use cache if available and not expired
+    const cached = this.statusCache.get(cacheKey);
     if (cached && (now - cached.timestamp) < cached.ttl) {
-      console.log(`[IntegrationService] Using cached status for ${integrationId}`);
+      console.log(`[IntegrationService] Using cached status for ${integrationId}: ${cached.status.connected}`);
       return cached.status;
     }
 
@@ -164,8 +173,8 @@ export class IntegrationService {
       // Use appropriate API call for each service
       switch (integrationId) {
         case 'googlecalendar':
-          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/calendar.calendarList.get/execute`;
-          data = { calendarId: userEmail.toLowerCase().trim() };
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/calendar.calendarList.list/execute`;
+          data = { minAccessRole: "reader" };
           break;
         case 'gmail':
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.labels.list/execute`;
@@ -173,6 +182,12 @@ export class IntegrationService {
           break;
         case 'googledrive':
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/drive.about.get/execute`;
+          data = {
+            fields: "user,storageQuota"
+          };
+          break;
+        case 'slack':
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/auth_test/execute`;
           data = {};
           break;
         default:
@@ -192,22 +207,37 @@ export class IntegrationService {
         });
       });
 
-      // Check if response indicates authentication/permission issues
+      console.log(`[IntegrationService] ${integrationId} status check - HTTP ${response.status}`);
+      
+      // Check if response indicates authentication/permission issues  
       const responseBody = response.data?.body || response.data?.output?.body || response.data;
       if (responseBody?.error) {
         const errorCode = responseBody.error.code;
         const errorStatus = responseBody.error.status;
         
+        console.log(`[IntegrationService] ${integrationId} API error - Code: ${errorCode}, Status: ${errorStatus}`);
+        
         // 401 (unauthorized), 403 (forbidden), delegation denied means not connected
         if (errorCode === 401 || errorCode === 403 || 
             errorStatus === 'UNAUTHENTICATED' || errorStatus === 'PERMISSION_DENIED' ||
             responseBody.error.message?.includes('Delegation denied')) {
-          console.warn(`[IntegrationService] ${integrationId} not connected - Auth error:`, responseBody.error.message);
-          return { ok: true, connected: false };
+          console.log(`[IntegrationService] ${integrationId} not connected - Auth error`);
+          
+          const result = { ok: true, connected: false };
+          
+          // Cache the failed result
+          this.statusCache.set(cacheKey, {
+            status: result,
+            timestamp: now,
+            ttl: this.CACHE_TTL / 4 // 15 seconds for failed attempts
+          });
+          
+          return result;
         }
       }
 
       // If we get a successful response (200) with no auth errors, user is connected
+      console.log(`[IntegrationService] ${integrationId} connected successfully`);
       const result = { ok: true, connected: true };
       
       // Cache the successful result
@@ -220,7 +250,7 @@ export class IntegrationService {
       return result;
     } catch (error: any) {
       // If the API call fails, assume not connected
-      console.warn(`[IntegrationService] Status check failed for ${integrationId}:`, error.message);
+      console.log(`[IntegrationService] ${integrationId} status check failed: ${error.message}`);
       
       const result = { ok: true, connected: false };
       
@@ -228,7 +258,7 @@ export class IntegrationService {
       this.statusCache.set(cacheKey, {
         status: result,
         timestamp: now,
-        ttl: this.CACHE_TTL / 2 // 30 seconds for failed attempts
+        ttl: this.CACHE_TTL / 4 // 15 seconds for failed attempts
       });
       
       return result;
@@ -242,7 +272,8 @@ export class IntegrationService {
     }
 
     try {
-      const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/disconnect`;
+      const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
+      console.log(`[IntegrationService] Disconnecting ${integrationId} for ${userEmail} via ${url}`);
       const response = await axios.post(url, {}, {
         params: { account: userEmail },
         headers: {

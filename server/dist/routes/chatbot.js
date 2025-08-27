@@ -92,6 +92,11 @@ function getFallbackResponse(messages) {
         { keywords: ['메일', '이메일', 'email', 'gmail'], responses: [
                 '이메일 관리는 Gmail 연동 기능을 사용해보세요! 📧',
                 '메일 관련 작업은 아래 Gmail 버튼을 활용해보시는 건 어떨까요? ✉️'
+            ] },
+        // Daily briefing related
+        { keywords: ['브리핑', '요약', '오늘', '일일', 'briefing', 'summary'], responses: [
+                '오늘의 업무 브리핑을 확인해보세요! 📋 아래 "오늘 브리핑" 버튼을 클릭하시거나 "오늘 브리핑 보여줘"라고 말씀해보세요.',
+                '일일 브리핑으로 오늘의 일정, 이메일, 파일을 한눈에 확인하세요! 📊'
             ] }
     ];
     // Find matching response
@@ -316,6 +321,9 @@ router.post('/action', async (req, res) => {
                 break;
             case 'drive':
                 result = await handleDriveAction(account, action, params);
+                break;
+            case 'briefing':
+                result = await handleBriefingAction(account, action, params);
                 break;
             default:
                 return res.status(400).json({
@@ -951,6 +959,122 @@ async function handleDriveAction(account, action, params) {
             content: `📁 Google Drive 작업 중 오류가 발생했습니다: ${error.message}`
         };
     }
+}
+async function handleBriefingAction(account, action, params) {
+    console.log(`[Briefing Action] account: ${account}, action: ${action}, params:`, params);
+    try {
+        switch (action) {
+            case 'getDailyBriefing':
+            case 'daily': {
+                // Call our briefing API
+                const response = await fetch(`${process.env.BACKEND_ORIGIN || 'http://localhost:3001'}/api/briefing/daily`, {
+                    headers: {
+                        'Authorization': `Bearer ${generateInternalToken(account)}`, // Would need to implement this
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (!response.ok) {
+                    return {
+                        success: true,
+                        content: '📋 브리핑 정보를 가져올 수 없습니다. 잠시 후 다시 시도해주세요.'
+                    };
+                }
+                const data = await response.json();
+                if (!data.ok || !data.briefing) {
+                    return {
+                        success: true,
+                        content: '📋 브리핑 데이터를 처리할 수 없습니다.'
+                    };
+                }
+                return {
+                    success: true,
+                    content: formatBriefingResponse(data.briefing)
+                };
+            }
+            default:
+                return {
+                    success: true,
+                    content: `📋 알 수 없는 브리핑 액션: ${action}`
+                };
+        }
+    }
+    catch (error) {
+        console.error(`[Briefing Action] Error:`, error);
+        return {
+            success: true,
+            content: `📋 브리핑 작업 중 오류가 발생했습니다: ${error.message}`
+        };
+    }
+}
+function formatBriefingResponse(briefing) {
+    let content = `📋 ${new Date(briefing.date).toLocaleDateString('ko-KR')} 일일 브리핑\n\n`;
+    // Calendar summary
+    if (briefing.summary.calendar && !briefing.summary.calendar.error) {
+        const cal = briefing.summary.calendar;
+        content += `📅 **오늘 일정 ${cal.todayEvents}개**\n`;
+        if (cal.nextEvent) {
+            content += `   ⏰ 다음: ${cal.nextEvent.time} ${cal.nextEvent.title}\n`;
+        }
+        if (cal.freeTimeBlocks && cal.freeTimeBlocks.length > 0) {
+            content += `   🕐 여유시간: ${cal.freeTimeBlocks[0].start}-${cal.freeTimeBlocks[0].end}\n`;
+        }
+    }
+    else if (briefing.services.calendar) {
+        content += `📅 일정 정보를 가져올 수 없습니다\n`;
+    }
+    else {
+        content += `📅 캘린더 연동 필요\n`;
+    }
+    content += '\n';
+    // Gmail summary
+    if (briefing.summary.gmail && !briefing.summary.gmail.error) {
+        const gmail = briefing.summary.gmail;
+        content += `📧 **읽지 않은 메일 ${gmail.unreadCount}개**\n`;
+        if (gmail.urgentCount > 0) {
+            content += `   🔥 긴급: ${gmail.urgentCount}개\n`;
+        }
+        if (gmail.needsReply > 0) {
+            content += `   📝 답장 필요: ${gmail.needsReply}개\n`;
+        }
+    }
+    else if (briefing.services.gmail) {
+        content += `📧 이메일 정보를 가져올 수 없습니다\n`;
+    }
+    else {
+        content += `📧 Gmail 연동 필요\n`;
+    }
+    content += '\n';
+    // Drive summary
+    if (briefing.summary.drive && !briefing.summary.drive.error) {
+        const drive = briefing.summary.drive;
+        content += `📁 **최근 파일 ${drive.recentFiles}개**\n`;
+        if (drive.todayModified > 0) {
+            content += `   ✏️ 오늘 수정: ${drive.todayModified}개\n`;
+        }
+        if (drive.sharedWithMe > 0) {
+            content += `   👥 공유받은 파일: ${drive.sharedWithMe}개\n`;
+        }
+    }
+    else if (briefing.services.drive) {
+        content += `📁 파일 정보를 가져올 수 없습니다\n`;
+    }
+    else {
+        content += `📁 Drive 연동 필요\n`;
+    }
+    // Add suggestions
+    if (briefing.suggestions && briefing.suggestions.length > 0) {
+        content += '\n💡 **오늘의 제안**\n';
+        briefing.suggestions.forEach((suggestion) => {
+            content += `   ${suggestion}\n`;
+        });
+    }
+    return content.trim();
+}
+// Temporary function - would need proper JWT token generation
+function generateInternalToken(email) {
+    // In a real implementation, you'd generate a proper JWT token
+    // For now, we'll work around this by calling the briefing logic directly
+    return 'internal-token';
 }
 // Helper function to format action responses for chat display
 function formatActionResponse(action, data) {

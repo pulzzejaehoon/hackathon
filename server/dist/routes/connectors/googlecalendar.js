@@ -250,8 +250,8 @@ router.get('/callback', async (req, res) => {
         </html>
       `);
         }
-        // TODO: Store tokenData (access_token, refresh_token, etc.) securely in your database
-        // For now, we'll return a popup close page that notifies the parent window
+        // Token is now stored and managed by Interactor
+        console.log(`[GC Callback] OAuth completed successfully for ${account}`);
         return res.send(`
       <!DOCTYPE html>
       <html>
