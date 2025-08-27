@@ -37,7 +37,9 @@
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(source .env)"
+      "Bash(source .env)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
