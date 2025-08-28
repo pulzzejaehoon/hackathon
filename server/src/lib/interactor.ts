@@ -45,11 +45,26 @@ export async function callInteractorApi(options: {
 
     const responseData = response.data;
 
+    // Check for error status codes in response body (Interactor API pattern)
+    // Only treat as error if status_code exists AND is >= 400
+    if (responseData && responseData.status_code && responseData.status_code >= 400) {
+      const errorMessage = responseData.body?.error?.message || 
+                          responseData.body?.error || 
+                          `HTTP ${responseData.status_code} error`;
+      console.error(`[Interactor] API returned error status ${responseData.status_code}:`, errorMessage);
+      return { 
+        success: false, 
+        error: errorMessage,
+        raw: responseData
+      };
+    }
+
     // Interactor API responses structure handling
+    // If no error status code, treat as success
     if (responseData && (responseData.success !== false)) {
       return { 
         success: true, 
-        output: responseData.output || responseData.body || responseData,
+        output: responseData,
         raw: responseData 
       };
     } else {

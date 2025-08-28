@@ -4,7 +4,7 @@ export interface IntegrationConfig {
   description: string;
   interactorConnectorName: string;
   icon?: string;
-  category: 'productivity' | 'communication' | 'storage' | 'calendar' | 'other';
+  category: 'productivity' | 'communication' | 'storage' | 'calendar' | 'development' | 'other';
 }
 
 export interface IntegrationStatus {

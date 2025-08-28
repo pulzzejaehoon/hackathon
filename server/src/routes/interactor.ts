@@ -100,6 +100,8 @@ router.post('/quick-action', authMiddleware, async (req, res) => {
     const { action, params = {} } = req.body;
     const user = (req as any).user;
 
+    console.log('[Quick Action] Received:', { action, params, userEmail: user.email });
+
     if (!action) {
       return res.status(400).json({
         success: false,
@@ -109,7 +111,10 @@ router.post('/quick-action', authMiddleware, async (req, res) => {
 
     // Convert quick action to structured command
     const command = InteractorCore.createQuickStartCommand(action, user.email, params);
+    console.log('[Quick Action] Generated command:', command);
+    
     if (!command) {
+      console.log('[Quick Action] Failed to create command for action:', action);
       return res.status(400).json({
         success: false,
         error: `Unknown quick action: ${action}`
@@ -118,10 +123,23 @@ router.post('/quick-action', authMiddleware, async (req, res) => {
 
     // Execute the structured command
     const result = await InteractorCore.processCommand(command);
+    console.log('[Quick Action] Command result:', { success: result.success, error: result.error, data: result.data });
     
-    // Return result with appropriate HTTP status
-    const statusCode = result.success ? 200 : 400;
-    res.status(statusCode).json(result);
+    // Format response to match client expectations
+    if (result.success) {
+      res.json({
+        success: true,
+        reply: {
+          content: result.message || 'Action completed successfully'
+        },
+        data: result.data
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error || 'Action failed'
+      });
+    }
 
   } catch (error: any) {
     console.error('[InteractorAPI] Quick action error:', error);

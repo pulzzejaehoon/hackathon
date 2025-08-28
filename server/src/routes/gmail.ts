@@ -354,7 +354,9 @@ router.post('/drafts/create', async (req: Request, res: Response) => {
       body
     ].join('\r\n');
 
-    const raw = Buffer.from(mimeMessage).toString('base64url');
+    console.log("server-api")
+
+    const raw = "VG86IHRlc3RAZXhhbXBsZS5jb20KRnJvbTogCkNjOiAKQmNjOiAKU3ViamVjdDogPT9VVEYtOD9RP1Rlc3Q9MjBTdWJqZWN0Pz0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PSJVVEYtOCIKCnNkZg==";
 
     const api = await callInteractorApi({
       account,

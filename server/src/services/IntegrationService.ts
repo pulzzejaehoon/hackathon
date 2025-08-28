@@ -67,6 +67,54 @@ export class IntegrationService {
       interactorConnectorName: 'googledrive-v1',
       category: 'storage',
       icon: '/logo003.svg'
+    }],
+    ['slack', {
+      id: 'slack',
+      name: 'Slack',
+      description: 'Connect with your team workspace',
+      interactorConnectorName: 'slack-v1',
+      category: 'communication',
+      icon: '/slack_logo.svg'
+    }],
+    ['teams', {
+      id: 'teams',
+      name: 'Microsoft Teams',
+      description: 'Collaborate with Microsoft Teams',
+      interactorConnectorName: 'teams-v1',
+      category: 'communication',
+      icon: '/microsoft-teams_logo.svg'
+    }],
+    ['zoom', {
+      id: 'zoom',
+      name: 'Zoom',
+      description: 'Video conferencing and meetings',
+      interactorConnectorName: 'zoom-v1',
+      category: 'communication',
+      icon: '/zoom_logo.png'
+    }],
+    ['github', {
+      id: 'github',
+      name: 'GitHub',
+      description: 'Code repository and collaboration',
+      interactorConnectorName: 'github-v1',
+      category: 'development',
+      icon: '/github_logo.png'
+    }],
+    ['gitlab', {
+      id: 'gitlab',
+      name: 'GitLab',
+      description: 'DevOps platform and repository',
+      interactorConnectorName: 'gitlab-v1',
+      category: 'development',
+      icon: '/gitlab_logo.png'
+    }],
+    ['jira', {
+      id: 'jira',
+      name: 'Jira',
+      description: 'Project management and issue tracking',
+      interactorConnectorName: 'jira-v1',
+      category: 'development',
+      icon: '/jira_logo.svg'
     }]
   ]);
 

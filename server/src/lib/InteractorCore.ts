@@ -100,19 +100,7 @@ export class InteractorCore {
         userData.email
       );
 
-      // Format the response for better user experience
-      if (result.success && result.data) {
-        const formattedMessage = this.formatApiResponseToUserFriendly(
-          command.action,
-          result.data,
-          integrationId
-        );
-        return {
-          ...result,
-          message: formattedMessage
-        };
-      }
-
+      // Return result (message already formatted in executeServiceAction)
       return result;
 
     } catch (error: any) {
@@ -222,10 +210,17 @@ export class InteractorCore {
       });
 
       if (result.success) {
+        // Format the response data for user-friendly display
+        const formattedMessage = this.formatApiResponseToUserFriendly(
+          action,
+          result.output,
+          integrationId
+        );
+        
         return {
           success: true,
           data: result.output,
-          message: `${action} completed successfully`
+          message: formattedMessage
         };
       } else {
         return {
