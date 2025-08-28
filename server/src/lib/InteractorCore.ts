@@ -406,7 +406,9 @@ export class InteractorCore {
         'get_today_events': 'calendar.events.list',
         'quick_add': 'calendar.events.insert',
         'update_event': 'calendar.events.update',
-        'delete_event': 'calendar.events.delete'
+        'delete_event': 'calendar.events.delete',
+        'list_calendars': 'calendar.calendarList.list',
+        'get_event': 'calendar.events.get'
       },
       'gmail': {
         'list_messages': 'gmail.users.messages.list',
@@ -451,6 +453,24 @@ export class InteractorCore {
           singleEvents: true,
           orderBy: 'startTime'
         }
+      },
+      'listCalendars': {
+        service: 'google.calendar',
+        action: 'list_calendars',
+        defaultParams: {}
+      },
+      'listEvents': {
+        service: 'google.calendar',
+        action: 'list_events',
+        defaultParams: {
+          singleEvents: true,
+          orderBy: 'startTime'
+        }
+      },
+      'getEvent': {
+        service: 'google.calendar',
+        action: 'get_event',
+        defaultParams: {}
       },
       'listMessages': {
         service: 'gmail',
