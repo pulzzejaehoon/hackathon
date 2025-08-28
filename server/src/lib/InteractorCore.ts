@@ -200,14 +200,43 @@ export class InteractorCore {
         };
       }
 
+      // Special handling for Gmail operations - match exact curl format
+      let processedParams = params;
+      if (integrationId === 'gmail') {
+        processedParams = InteractorCore.buildGmailApiParams(action, params, userEmail);
+      }
+
       // Execute via Interactor API - correct format with connector
-      console.log(`[InteractorCore] Executing ${integrationId}/${action} with params:`, params);
+      console.log(`[InteractorCore] Executing ${integrationId}/${action} with params:`, processedParams);
       const result = await callInteractorApi({
         account: userEmail,
         connector: integration.interactorConnectorName,
         action: interactorAction,
-        data: params
+        data: processedParams
       });
+
+      // Special success detection for Gmail operations  
+      if (integrationId === 'gmail' && (action === 'create_draft' || action === 'send_email')) {
+        const isSuccess = this.validateGmailOperationSuccess(result, action);
+        if (!isSuccess) {
+          const operation = action === 'create_draft' ? 'draft creation' : 'email sending';
+          return {
+            success: false,
+            error: `Gmail ${operation} failed - no ${action === 'create_draft' ? 'draft' : 'message'} ID returned`
+          };
+        }
+      }
+
+      // SPECIAL Gmail error handling - check for 403/401 in status_code
+      if (integrationId === 'gmail' && result.output?.output?.status_code >= 400) {
+        const statusCode = result.output.output.status_code;
+        const errorMessage = result.output.output.body?.error?.message || 
+                            `Gmail API error: ${statusCode}`;
+        return {
+          success: false,
+          error: errorMessage
+        };
+      }
 
       if (result.success) {
         // Format the response data for user-friendly display
@@ -239,6 +268,134 @@ export class InteractorCore {
   }
 
   /**
+   * Builds Gmail API parameters matching EXACT curl format provided by user
+   */
+  private static buildGmailApiParams(action: string, params: Record<string, any>, userEmail: string): Record<string, any> {
+    switch (action) {
+      case 'list_messages':
+        // curl data: { "userId": "jaehoon@interactor.com" }
+        return {
+          userId: userEmail // Use actual email, not 'me'
+        };
+
+      case 'get_message':
+        // curl data: { "id": "message_id", "userId": "jaehoon@interactor.com" }
+        return {
+          id: params.id,
+          userId: userEmail, // Use actual email, not 'me'
+          format: 'metadata' // Use metadata format instead of FULL to avoid scope error
+        };
+
+      case 'send_email':
+        // curl data: { "raw": "base64_encoded_message", "userId": "me" }
+        const rawMessage = InteractorCore.buildRFC822Message(params, userEmail);
+        return {
+          raw: rawMessage,
+          userId: "me" // For sending, use 'me' as per curl example
+        };
+
+      case 'create_draft':
+        // For draft creation, build RFC822 and wrap in resource
+        const draftMessage = InteractorCore.buildRFC822Message(params, userEmail);
+        return {
+          userId: userEmail,
+          resource: {
+            message: {
+              raw: draftMessage
+            }
+          }
+        };
+
+      case 'list_threads':
+        // Similar to list_messages
+        return {
+          userId: userEmail
+        };
+
+      default:
+        // For other Gmail actions, use actual email
+        return {
+          ...params,
+          userId: userEmail
+        };
+    }
+  }
+
+  /**
+   * Builds RFC822 message exactly like the curl example base64 content
+   * Curl example decodes to: "From: jaehoon@interactor.com\nTo: jaehoon@interactor.com\nSubject: Test email\n\nThis is the body."
+   */
+  private static buildRFC822Message(params: Record<string, any>, userEmail: string): string {
+    // Extract email components with defaults
+    const to = params.to || '';
+    const subject = params.subject || '';
+    const body = params.body || '';
+    const from = params.from || userEmail; // Default to authenticated user's email
+
+    // Build RFC822 message EXACTLY like curl example (using \n not \r\n)
+    let message = '';
+    message += `From: ${from}\n`;
+    message += `To: ${to}\n`;
+    message += `Subject: ${subject}\n`;
+    message += `\n`; // Empty line separates headers from body  
+    message += body;
+
+    console.log(`[InteractorCore] Built RFC822 message for Gmail:`, {
+      from,
+      to, 
+      subject,
+      messageLength: message.length,
+      rawMessage: message
+    });
+
+    // Base64 encode the RFC822 message (standard base64, not URL-safe)
+    const base64Message = Buffer.from(message).toString('base64');
+
+    console.log(`[InteractorCore] Base64 encoded message:`, {
+      base64Length: base64Message.length,
+      base64Sample: base64Message.substring(0, 100) + '...'
+    });
+
+    return base64Message;
+  }
+
+  /**
+   * Validates Gmail operations success by checking for appropriate ID
+   */
+  private static validateGmailOperationSuccess(result: any, action: string): boolean {
+    if (!result.success) {
+      return false;
+    }
+
+    // For send_email, check for HTTP 200 status instead of ID (some APIs don't return ID immediately)
+    if (action === 'send_email') {
+      const statusCode = result.output?.output?.status_code || result.output?.status_code || 200;
+      console.log(`[InteractorCore] Gmail ${action} validation:`, {
+        hasOutput: !!result.output,
+        statusCode,
+        success: statusCode < 400
+      });
+      return statusCode < 400;
+    }
+
+    // Check various possible response structures for ID for other operations
+    const responseId = result.output?.body?.id || 
+                      result.output?.output?.body?.id ||
+                      result.output?.id || 
+                      result.raw?.body?.id ||
+                      result.raw?.id;
+
+    console.log(`[InteractorCore] Gmail ${action} validation:`, {
+      hasOutput: !!result.output,
+      hasId: !!responseId,
+      outputKeys: result.output ? Object.keys(result.output) : [],
+      responseId
+    });
+
+    return !!responseId;
+  }
+
+  /**
    * Maps high-level actions to specific Interactor API actions
    */
   private static mapActionToInteractorAction(integrationId: string, action: string): string | null {
@@ -253,8 +410,11 @@ export class InteractorCore {
       },
       'gmail': {
         'list_messages': 'gmail.users.messages.list',
+        'list_threads': 'gmail.users.threads.list',
         'get_message': 'gmail.users.messages.get',
+        'get_thread': 'gmail.users.threads.get',
         'send_message': 'gmail.users.messages.send',
+        'send_email': 'gmail.users.messages.send',
         'create_draft': 'gmail.users.drafts.create',
         'list_labels': 'gmail.users.labels.list',
         'search_messages': 'gmail.users.messages.list'
@@ -296,9 +456,28 @@ export class InteractorCore {
         service: 'gmail',
         action: 'list_messages',
         defaultParams: {
-          userId: 'me',
-          maxResults: 10,
-          q: 'in:inbox'
+          // Gmail API expects actual email address, not 'me'
+        }
+      },
+      'listThreads': {
+        service: 'gmail',
+        action: 'list_threads',
+        defaultParams: {
+          // Gmail API expects actual email address, not 'me'
+        }
+      },
+      'getMessage': {
+        service: 'gmail',
+        action: 'get_message',
+        defaultParams: {
+          // Gmail API expects actual email address, not 'me'
+        }
+      },
+      'sendEmail': {
+        service: 'gmail',
+        action: 'send_email',
+        defaultParams: {
+          // Gmail API expects actual email address, not 'me'
         }
       },
       'listLabels': {
@@ -522,19 +701,28 @@ export class InteractorCore {
   }
 
   /**
-   * Formats Gmail API responses
+   * Formats Gmail API responses with SPECIAL handling for Gmail structure
    */
   private static formatGmailResponse(action: string, data: any): string {
     switch (action) {
       case 'list_messages': {
+        // Gmail responses have nested structure: data.output.body.messages
         let messages = [];
-        if (data.body?.messages) {
-          messages = data.body.messages;
-        } else if (data.output?.body?.messages) {
+        if (data.output?.body?.messages) {
           messages = data.output.body.messages;
+        } else if (data.body?.messages) {
+          messages = data.body.messages;
         } else if (data.messages) {
           messages = data.messages;
         }
+
+        console.log('[InteractorCore] Gmail list_messages format:', {
+          hasOutput: !!data.output,
+          hasBody: !!data.output?.body,
+          hasMessages: !!data.output?.body?.messages,
+          messageCount: messages?.length || 0,
+          sampleMessage: messages?.[0]
+        });
 
         if (!messages || messages.length === 0) {
           return '📧 받은편지함에 메일이 없습니다.';
@@ -545,7 +733,33 @@ export class InteractorCore {
           // Note: list messages only returns message IDs
           content += `${index + 1}. 메시지 ID: ${message.id}\n`;
         });
-        content += '\n💡 상세 내용을 보려면 Gmail을 확인해주세요.';
+        content += '\n💡 상세 내용을 보려면 Email 패널을 확인해주세요.';
+
+        return content.trim();
+      }
+
+      case 'list_threads': {
+        // Gmail threads response structure
+        let threads = [];
+        if (data.output?.body?.threads) {
+          threads = data.output.body.threads;
+        } else if (data.body?.threads) {
+          threads = data.body.threads;
+        } else if (data.threads) {
+          threads = data.threads;
+        }
+
+        if (!threads || threads.length === 0) {
+          return '📧 받은편지함에 스레드가 없습니다.';
+        }
+
+        let content = '📧 **최근 이메일 스레드:**\n\n';
+        threads.slice(0, 5).forEach((thread: any, index: number) => {
+          content += `${index + 1}. 스레드 ID: ${thread.id}\n`;
+          if (thread.snippet) {
+            content += `   미리보기: ${thread.snippet.substring(0, 50)}...\n`;
+          }
+        });
 
         return content.trim();
       }
