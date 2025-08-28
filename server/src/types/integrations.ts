@@ -23,6 +23,7 @@ export interface AuthUrlResponse {
 export interface StatusResponse {
   ok: boolean;
   connected: boolean;
+  account?: string;
   error?: string;
 }
 

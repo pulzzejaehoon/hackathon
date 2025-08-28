@@ -1,0 +1,8 @@
+{
+  "name": "ai-agent-saas",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "claude": "node claude-wrapper.js"
+  }
+}

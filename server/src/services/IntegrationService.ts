@@ -50,7 +50,7 @@ export class IntegrationService {
       description: 'Sync and manage your Google Calendar events',
       interactorConnectorName: 'googlecalendar-v1',
       category: 'calendar',
-      icon: '📅'
+      icon: '/logo001.svg'
     }],
     ['gmail', {
       id: 'gmail',
@@ -58,7 +58,7 @@ export class IntegrationService {
       description: 'Access and manage your Gmail emails',
       interactorConnectorName: 'gmail-v1',
       category: 'communication',
-      icon: '📧'
+      icon: '/logo002.svg'
     }],
     ['googledrive', {
       id: 'googledrive',
@@ -66,15 +66,7 @@ export class IntegrationService {
       description: 'Access and manage your Google Drive files',
       interactorConnectorName: 'googledrive-v1',
       category: 'storage',
-      icon: '📁'
-    }],
-    ['slack', {
-      id: 'slack',
-      name: 'Slack',
-      description: 'Send messages and manage Slack communications',
-      interactorConnectorName: 'slack-v1',
-      category: 'communication',
-      icon: '💬'
+      icon: '/logo003.svg'
     }]
   ]);
 
@@ -186,10 +178,6 @@ export class IntegrationService {
             fields: "user,storageQuota"
           };
           break;
-        case 'slack':
-          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/auth_test/execute`;
-          data = {};
-          break;
         default:
           return { ok: true, connected: false };
       }
@@ -238,7 +226,7 @@ export class IntegrationService {
 
       // If we get a successful response (200) with no auth errors, user is connected
       console.log(`[IntegrationService] ${integrationId} connected successfully`);
-      const result = { ok: true, connected: true };
+      const result = { ok: true, connected: true, account: userEmail };
       
       // Cache the successful result
       this.statusCache.set(cacheKey, {
@@ -272,29 +260,19 @@ export class IntegrationService {
     }
 
     try {
-      const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
-      console.log(`[IntegrationService] Disconnecting ${integrationId} for ${userEmail} via ${url}`);
-      const response = await axios.post(url, {}, {
-        params: { account: userEmail },
-        headers: {
-          'x-api-key': String(INTERACTOR_API_KEY),
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      });
-
-      const data = response.data;
-      if (!data.ok && !data.success) {
-        throw new Error(data.error || 'Disconnect failed');
-      }
-
-      // Clear cache for this user's integration status
+      console.log(`[IntegrationService] Disconnecting ${integrationId} for ${userEmail} (local cache clear only)`);
+      
+      // Clear cache for this user's integration status to force reconnection
       const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
       this.statusCache.delete(cacheKey);
       
+      // NOTE: We're not calling Interactor's revoke API as it may not exist or is undocumented.
+      // Users will need to manually revoke access through their Google/service settings if needed.
+      // The local cache clearing will require them to reconnect via OAuth.
+      
       return { 
         ok: true, 
-        message: `${integration.name} disconnected successfully` 
+        message: `${integration.name} disconnected locally. You may need to revoke access in your account settings for complete disconnection.` 
       };
     } catch (error: any) {
       console.error(`[IntegrationService] Disconnect error for ${integrationId}:`, error.message);

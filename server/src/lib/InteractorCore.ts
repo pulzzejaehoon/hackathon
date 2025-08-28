@@ -160,7 +160,6 @@ export class InteractorCore {
       'googledrive': 'googledrive',
       'drive': 'googledrive',
       'google.drive': 'googledrive',
-      'slack': 'slack'
     };
 
     return serviceMap[service.toLowerCase()] || null;
@@ -253,7 +252,7 @@ export class InteractorCore {
         'create_event': 'calendar.events.insert',
         'list_events': 'calendar.events.list',
         'get_today_events': 'calendar.events.list',
-        'quick_add': 'calendar.events.quickAdd',
+        'quick_add': 'calendar.events.insert',
         'update_event': 'calendar.events.update',
         'delete_event': 'calendar.events.delete'
       },
@@ -273,13 +272,6 @@ export class InteractorCore {
         'upload_file': 'drive.files.create',
         'delete_file': 'drive.files.delete'
       },
-      'slack': {
-        'send_message': 'chat_postMessage',
-        'schedule_message': 'chat_scheduleMessage',
-        'list_channels': 'conversations_list',
-        'get_user_info': 'users_info',
-        'auth_test': 'auth_test'
-      }
     };
 
     return actionMaps[integrationId]?.[action] || null;
@@ -335,7 +327,15 @@ export class InteractorCore {
         action: 'quick_add',
         defaultParams: {
           calendarId: 'primary',
-          text: 'New Meeting - 1 hour'
+          summary: 'New Meeting',
+          start: {
+            dateTime: new Date(Date.now() + 60*60*1000).toISOString(),
+            timeZone: 'Asia/Seoul'
+          },
+          end: {
+            dateTime: new Date(Date.now() + 2*60*60*1000).toISOString(),
+            timeZone: 'Asia/Seoul'
+          }
         }
       },
       'createDraft': {
@@ -369,22 +369,6 @@ export class InteractorCore {
         action: 'daily',
         defaultParams: {}
       },
-      'sendSlackMessage': {
-        service: 'slack',
-        action: 'schedule_message',
-        defaultParams: {
-          channel: '#general',
-          text: '안녕하세요! Slack 연동 테스트입니다.',
-          post_at: Math.floor(Date.now() / 1000) + 60 // 1분 후 전송
-        }
-      },
-      'listSlackChannels': {
-        service: 'slack',
-        action: 'list_channels',
-        defaultParams: {
-          types: 'public_channel,private_channel'
-        }
-      }
     };
 
     const mapping = quickActionMap[buttonAction];
@@ -432,8 +416,6 @@ export class InteractorCore {
           integrationId = 'gmail';
         } else if (action.includes('file') || action.includes('drive')) {
           integrationId = 'googledrive';
-        } else if (action.includes('slack') || action.includes('channel')) {
-          integrationId = 'slack';
         }
       }
 
@@ -457,8 +439,6 @@ export class InteractorCore {
           return this.formatGmailResponse(action, data);
         case 'googledrive':
           return this.formatDriveResponse(action, data);
-        case 'slack':
-          return this.formatSlackResponse(action, data);
         default:
           return 'Action completed successfully';
       }
@@ -708,83 +688,4 @@ export class InteractorCore {
     }
   }
 
-  /**
-   * Formats Slack API responses
-   */
-  private static formatSlackResponse(action: string, data: any): string {
-    switch (action) {
-      case 'schedule_message': {
-        let result = null;
-        if (data.body) {
-          result = data.body;
-        } else if (data.output?.body) {
-          result = data.output.body;
-        } else {
-          result = data;
-        }
-
-        if (result?.ok || result?.scheduled_message_id) {
-          const scheduleTime = result.post_at 
-            ? formatKoreaDateTime(new Date(result.post_at * 1000))
-            : '예약 시간 미정';
-          
-          return `💬 **Slack 메시지가 예약되었습니다!**\n\n📋 **채널:** ${result.channel || '알 수 없음'}\n⏰ **전송 시간:** ${scheduleTime}`;
-        } else {
-          return `💬 **Slack 메시지 예약에 실패했습니다.**\n\n❌ ${result?.error || '알 수 없는 오류'}`;
-        }
-      }
-
-      case 'list_channels': {
-        let channels = [];
-        if (data.body?.channels) {
-          channels = data.body.channels;
-        } else if (data.output?.body?.channels) {
-          channels = data.output.body.channels;
-        } else if (data.channels) {
-          channels = data.channels;
-        }
-
-        if (!channels || channels.length === 0) {
-          return '💬 접근 가능한 Slack 채널이 없습니다.';
-        }
-
-        let content = '💬 **Slack 채널 목록:**\n\n';
-        channels.slice(0, 10).forEach((channel: any, index: number) => {
-          const channelName = channel.name || 'unknown';
-          const isPrivate = channel.is_private ? '🔒' : '#';
-          const memberCount = channel.num_members ? ` (${channel.num_members}명)` : '';
-          
-          content += `${isPrivate} ${index + 1}. **${channelName}**${memberCount}\n`;
-        });
-
-        if (channels.length > 10) {
-          content += `\n... 그 외 ${channels.length - 10}개 채널`;
-        }
-
-        return content.trim();
-      }
-
-      case 'auth_test': {
-        let result = null;
-        if (data.body) {
-          result = data.body;
-        } else if (data.output?.body) {
-          result = data.output.body;
-        } else {
-          result = data;
-        }
-
-        if (result?.ok) {
-          const user = result.user || 'Unknown User';
-          const team = result.team || 'Unknown Team';
-          return `💬 **Slack 연결 확인 완료!**\n\n👤 **사용자:** ${user}\n🏢 **팀:** ${team}`;
-        } else {
-          return `💬 **Slack 연결 확인 실패**\n\n❌ ${result?.error || '알 수 없는 오류'}`;
-        }
-      }
-
-      default:
-        return '💬 Slack 작업이 완료되었습니다.';
-    }
-  }
 }
