@@ -123,7 +123,12 @@ router.post('/quick-action', authMiddleware, async (req, res) => {
 
     // Execute the structured command
     const result = await InteractorCore.processCommand(command);
-    console.log('[Quick Action] Command result:', { success: result.success, error: result.error, data: result.data });
+    console.log('[Quick Action] Command result:', { 
+      success: result.success, 
+      error: result.error, 
+      message: result.message,
+      dataKeys: result.data ? Object.keys(result.data) : []
+    });
     
     // Format response to match client expectations
     if (result.success) {
@@ -132,6 +137,7 @@ router.post('/quick-action', authMiddleware, async (req, res) => {
         reply: {
           content: result.message || 'Action completed successfully'
         },
+        message: result.message || 'Action completed successfully',
         data: result.data
       });
     } else {

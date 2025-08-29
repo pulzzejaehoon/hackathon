@@ -213,6 +213,11 @@ export class InteractorCore {
         processedParams = InteractorCore.buildGmailApiParams(action, params, userEmail);
       }
 
+      // Special handling for Google Drive search operations
+      if (integrationId === 'googledrive' && action === 'search_files') {
+        processedParams = InteractorCore.buildDriveSearchParams(params);
+      }
+
       // Execute via Interactor API - correct format with connector
       console.log(`[InteractorCore] Executing ${integrationId}/${action} with params:`, processedParams);
       const result = await callInteractorApi({
@@ -285,7 +290,10 @@ export class InteractorCore {
           userId: userEmail, // Use actual email, not 'me'
           maxResults: params.maxResults || 10,
           pageToken: params.pageToken || undefined,
-          q: params.q || 'in:inbox'
+          q: params.q || 'in:inbox',
+          // Note: Gmail messages.list API only returns message IDs
+          // To get subjects, we need to fetch individual messages or use threads.list
+          includeSpamTrash: false
         };
 
       case 'getMessage':
@@ -367,6 +375,48 @@ export class InteractorCore {
     });
 
     return base64Message;
+  }
+
+  /**
+   * Builds Google Drive search parameters, auto-mapping simple text to 'name contains' queries
+   */
+  private static buildDriveSearchParams(params: Record<string, any>): Record<string, any> {
+    const { q, query, ...otherParams } = params;
+    
+    // Use either 'q' or 'query' parameter
+    const searchText = q || query;
+    
+    if (searchText && typeof searchText === 'string') {
+      // If the query doesn't already contain operators like 'contains', 'name', 'fullText', etc.
+      // auto-wrap it with 'name contains' for better UX
+      const hasOperators = /\b(contains|name|fullText|mimeType|parents|trashed|starred|shared)\b/i.test(searchText);
+      
+      let processedQuery = searchText;
+      if (!hasOperators) {
+        // Simple text search - wrap with name contains for better results
+        processedQuery = `name contains '${searchText.replace(/'/g, "\\'")}'`;
+      }
+      
+      console.log(`[InteractorCore] Drive search query transformation:`, {
+        original: searchText,
+        hasOperators,
+        processed: processedQuery
+      });
+      
+      return {
+        ...otherParams,
+        q: processedQuery,
+        pageSize: otherParams.pageSize || 20,
+        fields: otherParams.fields || 'files(id,name,mimeType,modifiedTime,webViewLink,parents)'
+      };
+    }
+    
+    // Return as-is if no query parameter
+    return {
+      ...otherParams,
+      pageSize: otherParams.pageSize || 20,
+      fields: otherParams.fields || 'files(id,name,mimeType,modifiedTime,webViewLink,parents)'
+    };
   }
 
   /**
@@ -758,12 +808,14 @@ export class InteractorCore {
           return '📧 No emails found in inbox.';
         }
 
+        // Note: Gmail messages.list only returns message IDs and threadIds
+        // To get subjects, we need to make additional API calls or use a different approach
         let content = '📧 **Recent Email List:**\n\n';
-        messages.slice(0, 5).forEach((message: any, index: number) => {
-          // Note: list messages only returns message IDs
-          content += `${index + 1}. Message ID: ${message.id}\n`;
-        });
-        content += '\n💡 Check the Email panel for detailed content.';
+        content += 'Recent messages found. To see email subjects and details, please:\n';
+        content += '• Connect to Gmail in the Integrations panel\n';
+        content += '• Use the Gmail quick actions for detailed email information\n';
+        content += '• Check your Gmail directly for full email content\n\n';
+        content += `Found ${messages.length} recent messages in your inbox.`;
 
         return content.trim();
       }
@@ -779,18 +831,44 @@ export class InteractorCore {
           threads = data.threads;
         }
 
-        if (!threads || threads.length === 0) {
-          return '📧 No threads found in inbox.';
-        }
-
-        let content = '📧 **Recent Email Threads:**\n\n';
-        threads.slice(0, 5).forEach((thread: any, index: number) => {
-          content += `${index + 1}. Thread ID: ${thread.id}\n`;
-          if (thread.snippet) {
-            content += `   Preview: ${thread.snippet.substring(0, 50)}...\n`;
-          }
+        console.log('[InteractorCore] Gmail list_threads format:', {
+          hasOutput: !!data.output,
+          hasBody: !!data.output?.body,
+          hasThreads: !!data.output?.body?.threads,
+          threadCount: threads?.length || 0,
+          sampleThread: threads?.[0]
         });
 
+        if (!threads || threads.length === 0) {
+          return '📧 No emails found in inbox.';
+        }
+
+        let content = '📧 **Recent Emails:**\n\n';
+        threads.slice(0, 5).forEach((thread: any, index: number) => {
+          // Extract subject from snippet if available
+          let subject = 'No Subject';
+          let preview = '';
+          
+          if (thread.snippet) {
+            // Gmail snippet usually contains the email content
+            // We'll show first part as subject-like content
+            const snippetText = thread.snippet.trim();
+            if (snippetText.length > 50) {
+              subject = snippetText.substring(0, 50) + '...';
+            } else {
+              subject = snippetText || 'No Subject';
+            }
+            preview = snippetText.length > 80 ? snippetText.substring(0, 80) + '...' : snippetText;
+          }
+          
+          content += `${index + 1}. **${subject}**\n`;
+          if (preview && preview !== subject) {
+            content += `   📄 ${preview}\n`;
+          }
+          content += `   📧 Thread ID: ${thread.id}\n\n`;
+        });
+
+        content += '💡 Click the Gmail panel or check Gmail directly for full details.';
         return content.trim();
       }
 
@@ -907,17 +985,34 @@ export class InteractorCore {
         }
 
         if (!files || files.length === 0) {
-          return '📁 No search results found.';
+          return '🔍 **No search results found.**\n\nTry different keywords or check your spelling.';
         }
 
-        let content = '📁 **Search Results:**\n\n';
+        let content = `🔍 **Search Results** (${files.length} ${files.length === 1 ? 'file' : 'files'} found)\n\n`;
         files.forEach((file: any, index: number) => {
           const fileName = file.name || 'No name';
           const isFolder = file.mimeType?.includes('folder');
           const icon = isFolder ? '📂' : '📄';
+          const modifiedDate = file.modifiedTime ? 
+            new Date(file.modifiedTime).toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'short', 
+              day: 'numeric' 
+            }) : 'Unknown';
           
-          content += `${icon} ${index + 1}. **${fileName}**\n`;
+          content += `${icon} **${fileName}**\n`;
+          content += `   📅 Modified: ${modifiedDate}`;
+          
+          if (file.webViewLink) {
+            content += `\n   🔗 [Open in Google Drive](${file.webViewLink})`;
+          }
+          
+          content += '\n\n';
         });
+
+        if (files.length > 10) {
+          content += `_Showing first 10 of ${files.length} results_`;
+        }
 
         return content.trim();
       }
