@@ -519,6 +519,66 @@ router.get('/slack/channels', authMiddleware, async (req: Request, res: Response
 });
 
 /**
+ * GET /api/integrations/slack/users
+ * Get Slack users list for mentions
+ */
+router.get('/slack/users', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    const status = await IntegrationService.getStatus('slack', account);
+    if (!status.connected) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'Slack not connected. Please connect first.' 
+      });
+    }
+
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/users.list/execute';
+    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.INTERACTOR_API_KEY!,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('[Slack Users List] API Error:', response.status, errorData);
+      return res.status(502).json({ 
+        ok: false, 
+        error: 'Failed to fetch users from Slack' 
+      });
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      console.error('[Slack Users List] API returned error:', data.error);
+      return res.status(502).json({ 
+        ok: false, 
+        error: data.error || 'Failed to fetch users from Slack' 
+      });
+    }
+
+    return res.json({ ok: true, users: data.output });
+    
+  } catch (error) {
+    console.error('[Slack Users List] Error:', error);
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Internal server error while fetching users' 
+    });
+  }
+});
+
+/**
  * POST /api/integrations/slack/send-message
  * Send message to Slack channel
  */
@@ -567,6 +627,73 @@ router.post('/slack/send-message', authMiddleware, async (req: Request, res: Res
   } catch (error: any) {
     console.error('[Slack] Failed to send message:', error);
     return res.status(500).json({ ok: false, error: 'Failed to send message' });
+  }
+});
+
+/**
+ * POST /api/integrations/gmail/send-message
+ * Send email via Gmail
+ */
+router.post('/gmail/send-message', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    const { to, subject, body } = req.body;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    if (!to || !subject || !body) {
+      return res.status(400).json({ ok: false, error: 'To, subject, and body are required' });
+    }
+
+    if (!process.env.INTERACTOR_API_KEY) {
+      return res.status(500).json({ ok: false, error: 'Interactor API key not configured' });
+    }
+
+    // Gmail 메시지 전송 API 호출 (Quick button과 동일한 방식)
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/gmail-v1/action/gmail.users.messages.send/execute';
+    
+    // Create MIME message (동일한 형식으로)
+    const mimeMessage = [
+      `From: ${account}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      `Content-Type: text/plain; charset=UTF-8`,
+      '',
+      body
+    ].join('\r\n');
+
+    // Base64url encode the message (동일한 방식)
+    const raw = Buffer.from(mimeMessage).toString('base64url');
+
+    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.INTERACTOR_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: 'me',
+        raw: raw
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return res.json({
+      ok: true,
+      message: 'Email sent successfully',
+      data
+    });
+
+  } catch (error: any) {
+    console.error('[Gmail] Failed to send email:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to send email' });
   }
 });
 
