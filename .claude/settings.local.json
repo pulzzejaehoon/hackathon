@@ -39,7 +39,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(source .env)",
       "WebFetch(domain:ui.shadcn.com)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Read(/Users/hoon/Downloads/**)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
