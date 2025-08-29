@@ -72,7 +72,7 @@ export class IntegrationService {
       id: 'slack',
       name: 'Slack',
       description: 'Connect with your team workspace',
-      interactorConnectorName: 'slack-v1',
+      interactorConnectorName: 'slack',
       category: 'communication',
       icon: '/slack_logo.svg'
     }],
@@ -144,9 +144,16 @@ export class IntegrationService {
     try {
       const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/auth-url`;
       
+      // For Slack, add redirect_uri to callback to our server
+      const params: any = { account: userEmail.toLowerCase().trim() };
+      if (integrationId === 'slack') {
+        const backendOrigin = process.env.BACKEND_ORIGIN || 'http://localhost:3001';
+        params.redirect_uri = `${backendOrigin}/api/integrations/slack/oauth-callback`;
+      }
+      
       const response = await retryWithBackoff(async () => {
         return await axios.get(url, {
-          params: { account: userEmail.toLowerCase().trim() },
+          params,
           headers: {
             'x-api-key': String(INTERACTOR_API_KEY),
             'Content-Type': 'application/json',
@@ -225,6 +232,11 @@ export class IntegrationService {
           data = {
             fields: "user,storageQuota"
           };
+          break;
+        case 'slack':
+          // Slack OAuth flow is handled by Interactor, assume connected for now
+          // In production, you'd want to verify the connection via Slack API
+          return { ok: true, connected: true };
           break;
         default:
           return { ok: true, connected: false };

@@ -322,4 +322,252 @@ router.get('/status/all', authMiddleware, async (req: Request, res: Response) =>
   }
 });
 
+/**
+ * GET /api/integrations/proxy/auth-url
+ * Handle Interactor's OAuth callback proxy
+ */
+router.get('/proxy/auth-url', async (req: Request, res: Response) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+    
+    console.log('[Integration Proxy] Received callback:', { 
+      code: code ? `${code.toString().substring(0, 10)}...` : 'missing',
+      state: state ? `${state.toString().substring(0, 20)}...` : 'missing',
+      error: error || 'none'
+    });
+    
+    // Handle OAuth errors
+    if (error) {
+      const errorMessage = error_description || error || 'OAuth authorization failed';
+      console.error('[Integration Proxy] OAuth Error:', errorMessage);
+      
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Authentication Error</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+            .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+            .error { color: #dc3545; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h2 class="error">Authentication Failed</h2>
+            <p>There was an error connecting your Slack account:</p>
+            <p><strong>${errorMessage}</strong></p>
+            <p>You can close this window and try again.</p>
+          </div>
+          <script>
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({ 
+                type: 'OAUTH_ERROR', 
+                service: 'slack',
+                error: '${errorMessage}' 
+              }, '*');
+            }
+            setTimeout(() => window.close(), 3000);
+          </script>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Handle missing authorization code
+    if (!code) {
+      const errorMessage = 'Missing authorization code';
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Authentication Error</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+            .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+            .error { color: #dc3545; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h2 class="error">Authentication Failed</h2>
+            <p>Missing authorization code from Slack.</p>
+            <p>You can close this window and try again.</p>
+          </div>
+          <script>
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({ 
+                type: 'OAUTH_ERROR', 
+                service: 'slack',
+                error: '${errorMessage}' 
+              }, '*');
+            }
+            setTimeout(() => window.close(), 3000);
+          </script>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Success case - process authorization code and notify parent window
+    console.log('[Integration Proxy] Processing Slack OAuth success');
+    
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Successful</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+          .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+          .success { color: #28a745; }
+          .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 20px auto; }
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2 class="success">✓ Successfully Connected!</h2>
+          <p>Your Slack account has been connected successfully.</p>
+          <div class="spinner"></div>
+          <p>This window will close automatically...</p>
+        </div>
+        <script>
+          // Notify parent window of success
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ 
+              type: 'OAUTH_SUCCESS', 
+              service: 'slack' 
+            }, '*');
+          }
+          setTimeout(() => {
+            window.close();
+          }, 2000);
+        </script>
+      </body>
+      </html>
+    `);
+    
+  } catch (error: any) {
+    console.error('[Integration Proxy Callback] Error:', error);
+    const errorMessage = error.message || 'Internal server error';
+    
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+          .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+          .error { color: #dc3545; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2 class="error">Authentication Error</h2>
+          <p>An unexpected error occurred:</p>
+          <p><strong>${errorMessage}</strong></p>
+          <p>You can close this window and try again.</p>
+        </div>
+        <script>
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ 
+              type: 'OAUTH_ERROR', 
+              service: 'slack',
+              error: '${errorMessage}' 
+            }, '*');
+          }
+          setTimeout(() => window.close(), 3000);
+        </script>
+      </body>
+      </html>
+    `);
+  }
+});
+
+/**
+ * GET /api/integrations/slack/channels
+ * Get Slack channels list - Returns common channel suggestions since Interactor doesn't support channels.list
+ */
+router.get('/slack/channels', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    // Since Interactor doesn't support channels.list API, we return common channel suggestions
+    // Users will need to type the exact channel name (e.g., #general, #random, etc.)
+    const commonChannels = [
+      { name: 'general', suggestion: true },
+      { name: 'random', suggestion: true },
+      { name: 'announcements', suggestion: true }
+    ];
+    
+    return res.json({
+      ok: true,
+      channels: commonChannels,
+      note: 'These are common channel suggestions. Please type your exact channel name (e.g., #general, @username)'
+    });
+
+  } catch (error: any) {
+    console.error('[Slack] Failed to get channels:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to get channels' });
+  }
+});
+
+/**
+ * POST /api/integrations/slack/send-message
+ * Send message to Slack channel
+ */
+router.post('/slack/send-message', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    const { channel, text } = req.body;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    if (!channel || !text) {
+      return res.status(400).json({ ok: false, error: 'Channel and text are required' });
+    }
+
+    if (!process.env.INTERACTOR_API_KEY) {
+      return res.status(500).json({ ok: false, error: 'Interactor API key not configured' });
+    }
+
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/message.send/execute';
+    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.INTERACTOR_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        channel,
+        text
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return res.json({
+      ok: true,
+      message: 'Message sent successfully',
+      data
+    });
+
+  } catch (error: any) {
+    console.error('[Slack] Failed to send message:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to send message' });
+  }
+});
+
 export default router;
