@@ -538,7 +538,7 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
       });
     }
 
-    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/users.list/execute';
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/user.list/execute';
     const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
       method: 'POST',
       headers: {
@@ -559,15 +559,15 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
 
     const data = await response.json();
     
-    if (!data.success) {
-      console.error('[Slack Users List] API returned error:', data.error);
+    if (!data.output || !data.output.users) {
+      console.error('[Slack Users List] API returned error or missing data:', data);
       return res.status(502).json({ 
         ok: false, 
-        error: data.error || 'Failed to fetch users from Slack' 
+        error: 'Failed to fetch users from Slack' 
       });
     }
 
-    return res.json({ ok: true, users: data.output });
+    return res.json({ ok: true, users: { members: data.output.users } });
     
   } catch (error) {
     console.error('[Slack Users List] Error:', error);
