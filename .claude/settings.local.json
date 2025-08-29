@@ -45,7 +45,8 @@
       "Bash(npm run lint:*)",
       "Bash(PORT=3003 npm start)",
       "Bash(git remote add:*)",
-      "Read(/Users/hoon/**)"
+      "Read(/Users/hoon/**)",
+      "Bash(git submodule update:*)"
     ],
     "deny": [],
     "ask": []
