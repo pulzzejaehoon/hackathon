@@ -49,7 +49,7 @@ router.get('/auth-url', async (req: Request, res: Response) => {
       });
     }
 
-    return res.json({ ok: true, authUrl: finalUrl });
+    return res.json({ ok: true, url: finalUrl });
   } catch (err: any) {
     const status = err?.response?.status;
     const body = err?.response?.data;

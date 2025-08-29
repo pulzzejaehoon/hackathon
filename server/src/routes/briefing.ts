@@ -104,7 +104,7 @@ async function getCalendarSummary(account: string) {
       const eventStart = new Date(event.start?.dateTime || event.start?.date);
       if (eventStart > currentTime) {
         nextEvent = {
-          title: event.summary || '제목 없음',
+          title: event.summary || 'No Title',
           time: eventStart.toLocaleTimeString('ko-KR', { 
             hour: '2-digit', 
             minute: '2-digit',
@@ -124,13 +124,13 @@ async function getCalendarSummary(account: string) {
       nextEvent,
       freeTimeBlocks,
       events: events.slice(0, 5).map((event: any) => ({
-        title: event.summary || '제목 없음',
+        title: event.summary || 'No Title',
         time: event.start?.dateTime ? 
           new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { 
             hour: '2-digit', 
             minute: '2-digit',
             timeZone: 'Asia/Seoul'
-          }) : '종일',
+          }) : 'All Day',
         location: event.location || null
       }))
     };
@@ -247,7 +247,7 @@ function calculateFreeTime(events: any[], dayStart: Date, dayEnd: Date) {
         freeBlocks.push({
           start: currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
           end: eventStart.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-          duration: Math.floor(duration / 60) + '시간'
+          duration: Math.floor(duration / 60) + ' hours'
         });
       }
     }
@@ -265,7 +265,7 @@ function calculateFreeTime(events: any[], dayStart: Date, dayEnd: Date) {
       freeBlocks.push({
         start: currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
         end: '18:00',
-        duration: Math.floor(duration / 60) + '시간'
+        duration: Math.floor(duration / 60) + ' hours'
       });
     }
   }
@@ -279,30 +279,30 @@ function generateSuggestions(summary: any) {
   // Calendar suggestions
   if (summary.calendar && !summary.calendar.error) {
     if (summary.calendar.nextEvent) {
-      suggestions.push(`⏰ 다음 일정: ${summary.calendar.nextEvent.time} ${summary.calendar.nextEvent.title}`);
+      suggestions.push(`⏰ Next Event: ${summary.calendar.nextEvent.time} ${summary.calendar.nextEvent.title}`);
     }
     
     if (summary.calendar.freeTimeBlocks && summary.calendar.freeTimeBlocks.length > 0) {
       const freeTime = summary.calendar.freeTimeBlocks[0];
-      suggestions.push(`🕐 여유시간: ${freeTime.start}-${freeTime.end} (${freeTime.duration})`);
+      suggestions.push(`🕐 Free Time: ${freeTime.start}-${freeTime.end} (${freeTime.duration})`);
     }
   }
 
   // Gmail suggestions
   if (summary.gmail && !summary.gmail.error) {
     if (summary.gmail.urgentCount > 0) {
-      suggestions.push(`🔥 긴급 이메일 ${summary.gmail.urgentCount}개 확인 필요`);
+      suggestions.push(`🔥 ${summary.gmail.urgentCount} urgent emails need attention`);
     }
     
     if (summary.gmail.needsReply > 0) {
-      suggestions.push(`📧 답장 필요한 메일 ${summary.gmail.needsReply}개`);
+      suggestions.push(`📧 ${summary.gmail.needsReply} emails need reply`);
     }
   }
 
   // Drive suggestions
   if (summary.drive && !summary.drive.error) {
     if (summary.drive.todayModified > 0) {
-      suggestions.push(`📁 오늘 수정된 파일 ${summary.drive.todayModified}개 확인`);
+      suggestions.push(`📁 ${summary.drive.todayModified} files modified today`);
     }
   }
 
@@ -316,7 +316,7 @@ function generateNotifications(summary: any) {
   if (summary.gmail && summary.gmail.urgentCount > 5) {
     notifications.push({
       type: 'urgent',
-      message: `긴급 이메일이 ${summary.gmail.urgentCount}개 있습니다`,
+      message: `You have ${summary.gmail.urgentCount} urgent emails`,
       action: 'CHECK_GMAIL'
     });
   }
@@ -326,7 +326,7 @@ function generateNotifications(summary: any) {
     // Simplified - would need actual time parsing
     notifications.push({
       type: 'info',
-      message: `곧 시작될 일정: ${summary.calendar.nextEvent.title}`,
+      message: `Upcoming event: ${summary.calendar.nextEvent.title}`,
       action: 'VIEW_CALENDAR'
     });
   }

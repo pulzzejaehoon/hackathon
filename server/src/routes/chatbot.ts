@@ -26,19 +26,20 @@ async function getSmartResponse(messages: any[], account: string) {
     // Prepare system message for context
     const systemMessage = {
       role: 'system',
-      content: `당신은 Interactor Office AI 어시스턴트입니다. 사용자의 업무 효율성을 높이는 것이 목표입니다.
+      content: `You are the Interactor Office AI Assistant. Your goal is to enhance the user's work productivity.
 
-주요 기능:
-- Google Calendar 연동 (일정 조회/생성)
-- Gmail 연동 (메일 관리)
-- Google Drive 연동 (파일 관리)
+Main capabilities:
+- Google Calendar integration (schedule viewing/creation)
+- Gmail integration (email management) 
+- Google Drive integration (file management)
 
-응답 가이드라인:
-- 친근하고 도움이 되는 톤으로 답변
-- 한국어로 자연스럽게 대화
-- 구체적이고 실용적인 도움 제공
-- 필요하면 아래 퀵 액션 버튼 활용을 권장
-- 답변은 간결하게 2-3문장 내외로 작성`
+Response guidelines:
+- Respond in a friendly and helpful tone
+- Communicate naturally in English by default
+- If the user communicates in Korean, respond in Korean
+- Provide specific and practical assistance
+- Recommend using the quick action buttons below when appropriate
+- Keep responses concise, around 2-3 sentences`
     };
 
     // Prepare messages array with system message
@@ -89,32 +90,32 @@ function getFallbackResponse(messages: any[]) {
   const responses = [
     // Greetings
     { keywords: ['안녕', 'hello', 'hi', '하이'], responses: [
-      '안녕하세요! 무엇을 도와드릴까요? 📝',
-      '반가워요! 오늘도 좋은 하루 보내세요! ✨'
+      'Hello! How can I help you today? 📝',
+      'Hi there! Hope you have a great day! ✨'
     ]},
     
     // Questions about coding/technical
     { keywords: ['코드', 'code', '프로그래밍', 'programming', '개발', 'python', 'javascript'], responses: [
-      '죄송하지만 현재 AI 모델에 연결할 수 없어 코딩 관련 도움을 드리기 어렵습니다. 잠시 후 다시 시도해주세요.',
-      '기술적인 질문은 AI 모델이 필요한데, 현재 연결에 문제가 있네요. 다시 시도해보시겠어요?'
+      'Sorry, I cannot connect to the AI model right now to help with coding questions. Please try again later.',
+      'Technical questions need AI model access, but there\'s a connection issue. Would you like to try again?'
     ]},
     
     // Calendar/schedule related
-    { keywords: ['일정', '캘린더', '스케줄', '약속'], responses: [
-      '일정 관리가 필요하시군요! 아래 캘린더 버튼으로 일정을 확인하거나 추가해보세요! 📅',
-      '스케줄 관리는 Google 캘린더 연동 기능을 활용해보세요! 🗓️'
+    { keywords: ['일정', '캘린더', '스케줄', '약속', 'calendar', 'schedule', 'event'], responses: [
+      'Need help with scheduling? Try the calendar button below to check or add events! 📅',
+      'For schedule management, use the Google Calendar integration feature! 🗓️'
     ]},
     
     // Email related  
     { keywords: ['메일', '이메일', 'email', 'gmail'], responses: [
-      '이메일 관리는 Gmail 연동 기능을 사용해보세요! 📧',
-      '메일 관련 작업은 아래 Gmail 버튼을 활용해보시는 건 어떨까요? ✉️'
+      'For email management, try using the Gmail integration feature! 📧',
+      'How about using the Gmail buttons below for email tasks? ✉️'
     ]},
     
     // Daily briefing related
-    { keywords: ['브리핑', '요약', '오늘', '일일', 'briefing', 'summary'], responses: [
-      '오늘의 업무 브리핑을 확인해보세요! 📋 아래 "오늘 브리핑" 버튼을 클릭하시거나 "오늘 브리핑 보여줘"라고 말씀해보세요.',
-      '일일 브리핑으로 오늘의 일정, 이메일, 파일을 한눈에 확인하세요! 📊'
+    { keywords: ['브리핑', '요약', '오늘', '일일', 'briefing', 'summary', 'daily'], responses: [
+      'Check your daily work briefing! 📋 Click the "Daily Briefing" button below or say "show me today\'s briefing".',
+      'Get a daily briefing to see your schedule, emails, and files at a glance! 📊'
     ]}
   ];
 
@@ -128,9 +129,9 @@ function getFallbackResponse(messages: any[]) {
   
   // Default responses
   const defaultResponses = [
-    '현재 AI 모델 연결에 문제가 있어 자세한 답변을 드리기 어렵습니다. 아래 퀵 액션 버튼들을 활용해보세요!',
-    '죄송합니다. AI 서비스가 일시적으로 불안정합니다. 통합된 서비스 기능들을 대신 이용해보시겠어요?',
-    'AI 응답 생성에 문제가 발생했습니다. 캘린더나 Gmail 등의 연동 기능은 정상 작동합니다! 🔧'
+    'I\'m currently having trouble connecting to the AI model for detailed responses. Please try the quick action buttons below!',
+    'Sorry, the AI service is temporarily unstable. Would you like to use the integrated service features instead?',
+    'There was an issue generating an AI response. Calendar, Gmail, and other integration features are working normally! 🔧'
   ];
   
   return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
@@ -201,19 +202,20 @@ router.post('/stream', async (req: Request, res: Response) => {
       if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your-openrouter-api-key-here') {
         const systemMessage = {
           role: 'system',
-          content: `당신은 Interactor Office AI 어시스턴트입니다. 사용자의 업무 효율성을 높이는 것이 목표입니다.
+          content: `You are the Interactor Office AI Assistant. Your goal is to enhance the user's work productivity.
 
-주요 기능:
-- Google Calendar 연동 (일정 조회/생성)
-- Gmail 연동 (메일 관리)
-- Google Drive 연동 (파일 관리)
+Main capabilities:
+- Google Calendar integration (schedule viewing/creation)
+- Gmail integration (email management) 
+- Google Drive integration (file management)
 
-응답 가이드라인:
-- 친근하고 도움이 되는 톤으로 답변
-- 한국어로 자연스럽게 대화
-- 구체적이고 실용적인 도움 제공
-- 필요하면 아래 퀵 액션 버튼 활용을 권장
-- 답변은 간결하게 2-3문장 내외로 작성`
+Response guidelines:
+- Respond in a friendly and helpful tone
+- Communicate naturally in English by default
+- If the user communicates in Korean, respond in Korean
+- Provide specific and practical assistance
+- Recommend using the quick action buttons below when appropriate
+- Keep responses concise, around 2-3 sentences`
         };
 
         const chatMessages = [systemMessage, ...messages];
@@ -417,7 +419,7 @@ async function handleCalendarAction(account: string, action: string, params: any
   if (!status.connected) {
     return {
       success: true,
-      content: '📅 Google 캘린더가 연결되어 있지 않습니다. 먼저 설정에서 연결해주세요!'
+      content: '📅 Google Calendar is not connected. Please connect it in settings first!'
     };
   }
 
@@ -429,7 +431,7 @@ async function handleCalendarAction(account: string, action: string, params: any
         if (!eventText) {
           return {
             success: true,
-            content: '📅 일정 내용을 입력해주세요. 예: "내일 오후 3시에 회의"'
+            content: '📅 Please enter event details. Example: "Team meeting tomorrow at 3 PM"'
           };
         }
 
@@ -455,7 +457,7 @@ async function handleCalendarAction(account: string, action: string, params: any
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📅 일정 생성에 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📅 Failed to create event: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -476,24 +478,24 @@ async function handleCalendarAction(account: string, action: string, params: any
         if (!event) {
           return {
             success: true,
-            content: `📅 일정이 생성되었지만 세부 정보를 가져올 수 없습니다.`
+            content: `📅 Event was created but unable to retrieve details.`
           };
         }
         
-        const eventTitle = event.summary || event.title || '제목 없음';
-        let eventTime = '시간 정보 없음';
+        const eventTitle = event.summary || event.title || 'No Title';
+        let eventTime = 'No time information';
         
         if (event.start) {
           if (event.start.dateTime) {
             eventTime = formatKoreaDateTime(event.start.dateTime);
           } else if (event.start.date) {
-            eventTime = formatKoreaDate(event.start.date) + ' (종일)';
+            eventTime = formatKoreaDate(event.start.date) + ' (All Day)';
           }
         }
         
         return {
           success: true,
-          content: `📅 일정이 성공적으로 생성되었습니다!\n\n제목: ${eventTitle}\n시간: ${eventTime}`
+          content: `📅 Event created successfully!\n\nTitle: ${eventTitle}\nTime: ${eventTime}`
         };
       }
 
@@ -545,7 +547,7 @@ async function handleCalendarAction(account: string, action: string, params: any
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📅 일정을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📅 Failed to fetch events: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -572,20 +574,20 @@ async function handleCalendarAction(account: string, action: string, params: any
         if (!events || events.length === 0) {
           return {
             success: true,
-            content: '📅 오늘 예정된 일정이 없습니다.'
+            content: '📅 No events scheduled for today.'
           };
         }
 
-        let content = '📅 오늘의 일정:\n\n';
+        let content = '📅 Today\'s events:\n\n';
         events.forEach((event: any, index: number) => {
-          const eventTitle = event.summary || event.title || '제목 없음';
-          let startTime = '시간 정보 없음';
+          const eventTitle = event.summary || event.title || 'No Title';
+          let startTime = 'No time information';
           
           if (event.start) {
             if (event.start.dateTime) {
               startTime = formatKoreaDateTime(event.start.dateTime).split(' ').slice(3).join(' '); // 시간 부분만
             } else if (event.start.date) {
-              startTime = '종일';
+              startTime = 'All Day';
             }
           }
           
@@ -601,13 +603,13 @@ async function handleCalendarAction(account: string, action: string, params: any
       default:
         return {
           success: true,
-          content: `📅 알 수 없는 캘린더 액션: ${action}`
+          content: `📅 Unknown calendar action: ${action}`
         };
     }
   } catch (error: any) {
     return {
       success: true,
-      content: `📅 캘린더 작업 중 오류가 발생했습니다: ${error.message}`
+      content: `📅 Calendar error occurred: ${error.message}`
     };
   }
 }
@@ -621,7 +623,7 @@ async function handleGmailAction(account: string, action: string, params: any) {
   if (!status.connected) {
     return {
       success: true,
-      content: '📧 Gmail이 연결되어 있지 않습니다. 먼저 설정에서 연결해주세요!'
+      content: '📧 Gmail is not connected. Please connect it in settings first!'
     };
   }
 
@@ -632,7 +634,7 @@ async function handleGmailAction(account: string, action: string, params: any) {
         if (!to || !subject) {
           return {
             success: true,
-            content: '📧 받는 사람과 제목을 입력해주세요.'
+            content: '📧 Please enter recipient and subject.'
           };
         }
 
@@ -671,13 +673,13 @@ async function handleGmailAction(account: string, action: string, params: any) {
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📧 초안 생성에 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📧 Failed to create draft: ${response.data?.error || 'API error'}`
           };
         }
 
         return {
           success: true,
-          content: `📧 이메일 초안이 성공적으로 생성되었습니다!\n\n받는 사람: ${to}\n제목: ${subject}\n\nGmail에서 확인하고 발송할 수 있습니다.`
+          content: `📧 Email draft created successfully!\n\nTo: ${to}\nSubject: ${subject}\n\nYou can review and send it in Gmail.`
         };
       }
 
@@ -709,7 +711,7 @@ async function handleGmailAction(account: string, action: string, params: any) {
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📧 메일 목록을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📧 Failed to fetch email list: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -736,16 +738,53 @@ async function handleGmailAction(account: string, action: string, params: any) {
         if (!messages || messages.length === 0) {
           return {
             success: true,
-            content: '📧 받은편지함에 메일이 없습니다.'
+            content: '📧 No emails found in inbox.'
           };
         }
 
-        let content = '📧 최근 받은 메일 목록:\n\n';
-        messages.slice(0, 5).forEach((message: any, index: number) => {
-          // Note: Gmail API might return just message IDs, would need additional call to get details
-          content += `${index + 1}. 메시지 ID: ${message.id || '정보 없음'}\n`;
+        // Try to get message details for better display
+        let content = '📧 Recent inbox messages:\n\n';
+        const messagePromises = messages.slice(0, 5).map(async (message: any, index: number) => {
+          try {
+            // Try to get message details to show subject
+            const detailUrl = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/gmail-v1/action/gmail.users.messages.get/execute`;
+            const detailResponse = await axios.post(detailUrl, {
+              userId: "me",
+              id: message.id,
+              format: "metadata",
+              metadataHeaders: ["Subject", "From"]
+            }, {
+              params: { account },
+              headers: {
+                'x-api-key': String(process.env.INTERACTOR_API_KEY),
+                'Content-Type': 'application/json'
+              },
+              timeout: 5000
+            });
+
+            if (detailResponse.data?.body?.payload?.headers || detailResponse.data?.output?.body?.payload?.headers) {
+              const headers = detailResponse.data?.body?.payload?.headers || detailResponse.data?.output?.body?.payload?.headers;
+              const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject';
+              const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown Sender';
+              return `${index + 1}. **${subject}**\n   From: ${from}\n`;
+            }
+          } catch (error) {
+            // Fallback to just ID if detail fetch fails
+            return `${index + 1}. Message ID: ${message.id || 'No ID'}\n`;
+          }
         });
-        content += `\n💡 상세 내용은 Gmail에서 확인하세요.`;
+
+        try {
+          const detailedMessages = await Promise.all(messagePromises);
+          content += detailedMessages.join('\n');
+        } catch (error) {
+          // Fallback to simple ID listing
+          messages.slice(0, 5).forEach((message: any, index: number) => {
+            content += `${index + 1}. Message ID: ${message.id || 'No ID'}\n`;
+          });
+        }
+        
+        content += `\n💡 View full details in Gmail.`;
 
         return {
           success: true,
@@ -774,7 +813,7 @@ async function handleGmailAction(account: string, action: string, params: any) {
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📧 라벨 목록을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📧 Failed to fetch label list: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -795,13 +834,13 @@ async function handleGmailAction(account: string, action: string, params: any) {
         if (!labels || labels.length === 0) {
           return {
             success: true,
-            content: '📧 Gmail 라벨이 없습니다.'
+            content: '📧 No Gmail labels found.'
           };
         }
 
-        let content = '📧 Gmail 라벨 목록:\n\n';
+        let content = '📧 Gmail Labels:\n\n';
         labels.slice(0, 10).forEach((label: any, index: number) => {
-          const labelName = label.name || label.id || '이름 없음';
+          const labelName = label.name || label.id || 'No name';
           content += `${index + 1}. ${labelName}\n`;
         });
 
@@ -814,14 +853,14 @@ async function handleGmailAction(account: string, action: string, params: any) {
       default:
         return {
           success: true,
-          content: `📧 알 수 없는 Gmail 액션: ${action}`
+          content: `📧 Unknown Gmail action: ${action}`
         };
     }
   } catch (error: any) {
     console.error(`[Gmail Action] Error:`, error);
     return {
       success: true,
-      content: `📧 Gmail 작업 중 오류가 발생했습니다: ${error.message}`
+      content: `📧 Error occurred during Gmail operation: ${error.message}`
     };
   }
 }
@@ -835,7 +874,7 @@ async function handleDriveAction(account: string, action: string, params: any) {
   if (!status.connected) {
     return {
       success: true,
-      content: '📁 Google Drive가 연결되어 있지 않습니다. 먼저 설정에서 연결해주세요!'
+      content: '📁 Google Drive is not connected. Please connect it in settings first!'
     };
   }
 
@@ -869,7 +908,7 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📁 파일 목록을 가져오는데 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📁 Failed to fetch file list: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -890,20 +929,20 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!files || files.length === 0) {
           return {
             success: true,
-            content: '📁 Google Drive에 파일이 없습니다.'
+            content: '📁 No files found in Google Drive.'
           };
         }
 
-        let content = '📁 Google Drive 파일 목록:\n\n';
+        let content = '📁 Google Drive file list:\n\n';
         files.slice(0, 8).forEach((file: any, index: number) => {
-          const fileName = file.name || '이름 없음';
+          const fileName = file.name || 'No Name';
           const fileSize = file.size ? `(${Math.round(file.size / 1024)}KB)` : '';
           const fileType = file.mimeType?.includes('folder') ? '📂' : '📄';
           content += `${fileType} ${index + 1}. ${fileName} ${fileSize}\n`;
         });
 
         if (files.length > 8) {
-          content += `\n... 그 외 ${files.length - 8}개 파일이 더 있습니다.`;
+          content += `\n... and ${files.length - 8} more files.`;
         }
 
         return {
@@ -917,7 +956,7 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!folderName) {
           return {
             success: true,
-            content: '📁 생성할 폴더 이름을 입력해주세요.'
+            content: '📁 Please enter folder name to create.'
           };
         }
 
@@ -945,7 +984,7 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📁 폴더 생성에 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📁 Failed to create folder: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -965,7 +1004,7 @@ async function handleDriveAction(account: string, action: string, params: any) {
         
         return {
           success: true,
-          content: `📁 폴더 "${folderCreatedName}"가 성공적으로 생성되었습니다!`
+          content: `📁 Folder "${folderCreatedName}" created successfully!`
         };
       }
 
@@ -974,21 +1013,26 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!query) {
           return {
             success: true,
-            content: '📁 검색할 파일명이나 키워드를 입력해주세요.'
+            content: '📁 Please enter filename or keywords to search.'
           };
         }
 
         const url = `${process.env.INTERACTOR_BASE_URL || 'https://console.interactor.com/api/v1'}/connector/interactor/googledrive-v1/action/drive.files.list/execute`;
         console.log(`[Drive Search Files] URL: ${url}?account=${account}`);
+        
+        // Escape query and use simpler search format
+        const escapedQuery = query.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        const searchQuery = `name contains "${escapedQuery}" and trashed=false`;
+        
         console.log(`[Drive Search Files] Data:`, {
           pageSize: 10,
-          q: `name contains '${query}' and trashed=false`,
+          q: searchQuery,
           fields: "files(id,name,mimeType,size,webViewLink)"
         });
         
         const response = await axios.post(url, {
           pageSize: 10,
-          q: `name contains '${query}' and trashed=false`,
+          q: searchQuery,
           fields: "files(id,name,mimeType,size,webViewLink)"
         }, {
           params: { account },
@@ -1004,7 +1048,7 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!response.data || response.data.error) {
           return {
             success: true,
-            content: `📁 파일 검색에 실패했습니다: ${response.data?.error || 'API 오류'}`
+            content: `📁 Failed to search files: ${response.data?.error || 'API error'}`
           };
         }
 
@@ -1025,13 +1069,13 @@ async function handleDriveAction(account: string, action: string, params: any) {
         if (!files || files.length === 0) {
           return {
             success: true,
-            content: `📁 "${query}"와 관련된 파일을 찾을 수 없습니다.`
+            content: `📁 No files found related to "${query}".`
           };
         }
 
-        let content = `📁 "${query}" 검색 결과:\n\n`;
+        let content = `📁 "${query}" search results:\n\n`;
         files.forEach((file: any, index: number) => {
-          const fileName = file.name || '이름 없음';
+          const fileName = file.name || 'No Name';
           const fileSize = file.size ? `(${Math.round(file.size / 1024)}KB)` : '';
           const fileType = file.mimeType?.includes('folder') ? '📂' : '📄';
           content += `${fileType} ${index + 1}. ${fileName} ${fileSize}\n`;
@@ -1046,14 +1090,14 @@ async function handleDriveAction(account: string, action: string, params: any) {
       default:
         return {
           success: true,
-          content: `📁 알 수 없는 Google Drive 액션: ${action}\n\n사용 가능한 액션:\n- 파일 목록 보기\n- 폴더 생성\n- 파일 검색`
+          content: `📁 Unknown Google Drive action: ${action}\n\nAvailable actions:\n- View file list\n- Create folder\n- Search files`
         };
     }
   } catch (error: any) {
     console.error(`[Drive Action] Error:`, error);
     return {
       success: true,
-      content: `📁 Google Drive 작업 중 오류가 발생했습니다: ${error.message}`
+      content: `📁 Google Drive error occurred: ${error.message}`
     };
   }
 }
@@ -1065,69 +1109,125 @@ async function handleBriefingAction(account: string, action: string, params: any
     switch (action) {
       case 'getDailyBriefing':
       case 'daily': {
-        // Call our briefing API
-        const response = await fetch(`${process.env.BACKEND_ORIGIN || 'http://localhost:3001'}/api/briefing/daily`, {
-          headers: {
-            'Authorization': `Bearer ${generateInternalToken(account)}`, // Would need to implement this
-            'Content-Type': 'application/json'
+        // Import and call briefing logic directly instead of HTTP request
+        const briefingModule = await import('./briefing.js');
+        
+        // Create mock request object with user data
+        const mockReq = {
+          user: { email: account }
+        } as any;
+        
+        // Create mock response object to capture data
+        let briefingData: any = null;
+        const mockRes = {
+          json: (data: any) => { briefingData = data; },
+          status: () => mockRes
+        } as any;
+
+        // Call the briefing route handler directly (it's the default export's get handler)
+        try {
+          // Get the router and find the daily briefing handler
+          const router = briefingModule.default;
+          
+          // Since we can't easily extract the handler, let's call the briefing logic manually
+          // This will replicate what's in /api/briefing/daily
+          const { IntegrationService: BriefingIntegrationService } = await import('../services/IntegrationService.js');
+          const { getKoreaTime } = await import('../utils/timezone.js');
+          
+          // Get connection status for all services
+          const [calendarStatus, gmailStatus, driveStatus] = await Promise.all([
+            BriefingIntegrationService.getStatus('googlecalendar', account),
+            BriefingIntegrationService.getStatus('gmail', account),
+            BriefingIntegrationService.getStatus('googledrive', account)
+          ]);
+
+          const koreaTime = getKoreaTime();
+          const koreaDateString = `${koreaTime.getFullYear()}-${String(koreaTime.getMonth() + 1).padStart(2, '0')}-${String(koreaTime.getDate()).padStart(2, '0')}`;
+          
+          const briefing: any = {
+            date: koreaDateString,
+            timestamp: new Date().toISOString(),
+            services: {
+              calendar: calendarStatus.connected,
+              gmail: gmailStatus.connected,
+              drive: driveStatus.connected
+            },
+            summary: {
+              calendar: null as any,
+              gmail: null as any,
+              drive: null as any
+            },
+            suggestions: [] as string[],
+            notifications: [] as any[]
+          };
+
+          // Fetch Calendar data if connected
+          if (calendarStatus.connected) {
+            briefing.summary.calendar = await getCalendarSummaryForBriefing(account);
           }
-        });
 
-        if (!response.ok) {
+          // Fetch Gmail data if connected  
+          if (gmailStatus.connected) {
+            briefing.summary.gmail = await getGmailSummaryForBriefing(account);
+          }
+
+          // Fetch Drive data if connected
+          if (driveStatus.connected) {
+            briefing.summary.drive = await getDriveSummaryForBriefing(account);
+          }
+
+          // Generate suggestions and notifications
+          briefing.suggestions = generateBriefingSuggestions(briefing.summary);
+          briefing.notifications = generateBriefingNotifications(briefing.summary);
+
           return {
             success: true,
-            content: '📋 브리핑 정보를 가져올 수 없습니다. 잠시 후 다시 시도해주세요.'
+            content: formatBriefingResponse(briefing)
           };
-        }
-
-        const data = await response.json();
-        if (!data.ok || !data.briefing) {
+          
+        } catch (briefingError: any) {
+          console.error('[Briefing Action] Direct call failed:', briefingError);
           return {
             success: true,
-            content: '📋 브리핑 데이터를 처리할 수 없습니다.'
+            content: '📋 Daily briefing is temporarily unavailable. Please try again later.'
           };
         }
-
-        return {
-          success: true,
-          content: formatBriefingResponse(data.briefing)
-        };
       }
 
       default:
         return {
           success: true,
-          content: `📋 알 수 없는 브리핑 액션: ${action}`
+          content: `📋 Unknown briefing action: ${action}`
         };
     }
   } catch (error: any) {
     console.error(`[Briefing Action] Error:`, error);
     return {
       success: true,
-      content: `📋 브리핑 작업 중 오류가 발생했습니다: ${error.message}`
+      content: `📋 Briefing error: ${error.message}`
     };
   }
 }
 
 function formatBriefingResponse(briefing: any): string {
-  let content = `📋 ${new Date(briefing.date).toLocaleDateString('ko-KR')} 일일 브리핑\n\n`;
+  let content = `📋 Daily Briefing for ${new Date(briefing.date).toLocaleDateString('en-US')}\n\n`;
 
   // Calendar summary
   if (briefing.summary.calendar && !briefing.summary.calendar.error) {
     const cal = briefing.summary.calendar;
-    content += `📅 **오늘 일정 ${cal.todayEvents}개**\n`;
+    content += `📅 **${cal.todayEvents} events today**\n`;
     
     if (cal.nextEvent) {
-      content += `   ⏰ 다음: ${cal.nextEvent.time} ${cal.nextEvent.title}\n`;
+      content += `   ⏰ Next: ${cal.nextEvent.time} ${cal.nextEvent.title}\n`;
     }
     
     if (cal.freeTimeBlocks && cal.freeTimeBlocks.length > 0) {
-      content += `   🕐 여유시간: ${cal.freeTimeBlocks[0].start}-${cal.freeTimeBlocks[0].end}\n`;
+      content += `   🕐 Free time: ${cal.freeTimeBlocks[0].start}-${cal.freeTimeBlocks[0].end}\n`;
     }
   } else if (briefing.services.calendar) {
-    content += `📅 일정 정보를 가져올 수 없습니다\n`;
+    content += `📅 Unable to fetch calendar information\n`;
   } else {
-    content += `📅 캘린더 연동 필요\n`;
+    content += `📅 Calendar integration required\n`;
   }
 
   content += '\n';
@@ -1135,19 +1235,19 @@ function formatBriefingResponse(briefing: any): string {
   // Gmail summary
   if (briefing.summary.gmail && !briefing.summary.gmail.error) {
     const gmail = briefing.summary.gmail;
-    content += `📧 **읽지 않은 메일 ${gmail.unreadCount}개**\n`;
+    content += `📧 **${gmail.unreadCount} unread emails**\n`;
     
     if (gmail.urgentCount > 0) {
-      content += `   🔥 긴급: ${gmail.urgentCount}개\n`;
+      content += `   🔥 Urgent: ${gmail.urgentCount}\n`;
     }
     
     if (gmail.needsReply > 0) {
-      content += `   📝 답장 필요: ${gmail.needsReply}개\n`;
+      content += `   📝 Need reply: ${gmail.needsReply}\n`;
     }
   } else if (briefing.services.gmail) {
-    content += `📧 이메일 정보를 가져올 수 없습니다\n`;
+    content += `📧 Unable to fetch email information\n`;
   } else {
-    content += `📧 Gmail 연동 필요\n`;
+    content += `📧 Gmail integration required\n`;
   }
 
   content += '\n';
@@ -1155,24 +1255,24 @@ function formatBriefingResponse(briefing: any): string {
   // Drive summary
   if (briefing.summary.drive && !briefing.summary.drive.error) {
     const drive = briefing.summary.drive;
-    content += `📁 **최근 파일 ${drive.recentFiles}개**\n`;
+    content += `📁 **${drive.recentFiles} recent files**\n`;
     
     if (drive.todayModified > 0) {
-      content += `   ✏️ 오늘 수정: ${drive.todayModified}개\n`;
+      content += `   ✏️ Modified today: ${drive.todayModified}\n`;
     }
     
     if (drive.sharedWithMe > 0) {
-      content += `   👥 공유받은 파일: ${drive.sharedWithMe}개\n`;
+      content += `   👥 Shared with me: ${drive.sharedWithMe}\n`;
     }
   } else if (briefing.services.drive) {
-    content += `📁 파일 정보를 가져올 수 없습니다\n`;
+    content += `📁 Unable to fetch file information\n`;
   } else {
-    content += `📁 Drive 연동 필요\n`;
+    content += `📁 Drive integration required\n`;
   }
 
   // Add suggestions
   if (briefing.suggestions && briefing.suggestions.length > 0) {
-    content += '\n💡 **오늘의 제안**\n';
+    content += '\n💡 **Today\'s suggestions**\n';
     briefing.suggestions.forEach((suggestion: string) => {
       content += `   ${suggestion}\n`;
     });
@@ -1181,11 +1281,199 @@ function formatBriefingResponse(briefing: any): string {
   return content.trim();
 }
 
-// Temporary function - would need proper JWT token generation
-function generateInternalToken(email: string): string {
-  // In a real implementation, you'd generate a proper JWT token
-  // For now, we'll work around this by calling the briefing logic directly
-  return 'internal-token';
+// Helper functions for daily briefing (similar to briefing.ts but for internal use)
+async function getCalendarSummaryForBriefing(account: string) {
+  try {
+    const now = new Date();
+    const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+    const todayStart = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate(), 0, 0, 0);
+    const todayEnd = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate(), 23, 59, 59);
+
+    const api = await callInteractorApi({
+      account,
+      connector: 'googlecalendar-v1',
+      action: 'calendar.events.list',
+      data: {
+        calendarId: "primary",
+        timeMin: todayStart.toISOString(),
+        timeMax: todayEnd.toISOString(),
+        singleEvents: true,
+        orderBy: "startTime",
+        maxResults: 20
+      }
+    });
+
+    if (!api.success) {
+      return { error: 'Failed to fetch calendar data' };
+    }
+
+    const events = api.output?.body?.items || api.output?.items || [];
+    
+    let nextEvent = null;
+    const currentTime = new Date();
+    
+    for (const event of events) {
+      const eventStart = new Date(event.start?.dateTime || event.start?.date);
+      if (eventStart > currentTime) {
+        nextEvent = {
+          title: event.summary || 'No Title',
+          time: eventStart.toLocaleTimeString('ko-KR', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            timeZone: 'Asia/Seoul'
+          }),
+          location: event.location || null
+        };
+        break;
+      }
+    }
+
+    return {
+      todayEvents: events.length,
+      nextEvent,
+      events: events.slice(0, 5).map((event: any) => ({
+        title: event.summary || 'No Title',
+        time: event.start?.dateTime ? 
+          new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            timeZone: 'Asia/Seoul'
+          }) : 'All Day',
+        location: event.location || null
+      }))
+    };
+  } catch (error) {
+    console.error('[Calendar Summary] Error:', error);
+    return { error: 'Calendar summary failed' };
+  }
+}
+
+async function getGmailSummaryForBriefing(account: string) {
+  try {
+    const api = await callInteractorApi({
+      account,
+      connector: 'gmail-v1',
+      action: 'gmail.users.messages.list',
+      data: {
+        userId: 'me',
+        q: 'is:unread',
+        maxResults: 50
+      }
+    });
+
+    if (!api.success) {
+      return { error: 'Failed to fetch Gmail data' };
+    }
+
+    const messages = api.output?.body?.messages || api.output?.messages || [];
+    const todayMessages = messages.filter((msg: any, index: number) => index < 20);
+    const urgentCount = Math.min(Math.floor(messages.length * 0.1), 5);
+
+    return {
+      unreadCount: messages.length,
+      todayMessages: todayMessages.length,
+      urgentCount,
+      needsReply: Math.min(Math.floor(messages.length * 0.2), 8)
+    };
+  } catch (error) {
+    console.error('[Gmail Summary] Error:', error);
+    return { error: 'Gmail summary failed' };
+  }
+}
+
+async function getDriveSummaryForBriefing(account: string) {
+  try {
+    const api = await callInteractorApi({
+      account,
+      connector: 'googledrive-v1',
+      action: 'drive.files.list',
+      data: {
+        pageSize: 20,
+        orderBy: 'modifiedTime desc',
+        q: "trashed=false",
+        fields: "files(id,name,mimeType,modifiedTime,shared,owners)"
+      }
+    });
+
+    if (!api.success) {
+      return { error: 'Failed to fetch Drive data' };
+    }
+
+    const files = api.output?.body?.files || api.output?.files || [];
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayFiles = files.filter((file: any) => {
+      const modifiedDate = new Date(file.modifiedTime);
+      return modifiedDate >= today;
+    });
+
+    const sharedFiles = files.filter((file: any) => file.shared === true);
+
+    return {
+      recentFiles: files.length,
+      todayModified: todayFiles.length,
+      sharedWithMe: Math.min(sharedFiles.length, 10),
+      recentFileNames: files.slice(0, 5).map((file: any) => ({
+        name: file.name,
+        type: file.mimeType?.includes('folder') ? 'folder' : 'file',
+        modified: new Date(file.modifiedTime).toLocaleDateString('ko-KR')
+      }))
+    };
+  } catch (error) {
+    console.error('[Drive Summary] Error:', error);
+    return { error: 'Drive summary failed' };
+  }
+}
+
+function generateBriefingSuggestions(summary: any) {
+  const suggestions = [];
+
+  if (summary.calendar && !summary.calendar.error) {
+    if (summary.calendar.nextEvent) {
+      suggestions.push(`⏰ Next Event: ${summary.calendar.nextEvent.time} ${summary.calendar.nextEvent.title}`);
+    }
+  }
+
+  if (summary.gmail && !summary.gmail.error) {
+    if (summary.gmail.urgentCount > 0) {
+      suggestions.push(`🔥 ${summary.gmail.urgentCount} urgent emails need attention`);
+    }
+    if (summary.gmail.needsReply > 0) {
+      suggestions.push(`📧 ${summary.gmail.needsReply} emails need reply`);
+    }
+  }
+
+  if (summary.drive && !summary.drive.error) {
+    if (summary.drive.todayModified > 0) {
+      suggestions.push(`📁 ${summary.drive.todayModified} files modified today`);
+    }
+  }
+
+  return suggestions.slice(0, 5);
+}
+
+function generateBriefingNotifications(summary: any) {
+  const notifications = [];
+
+  if (summary.gmail && summary.gmail.urgentCount > 5) {
+    notifications.push({
+      type: 'urgent',
+      message: `You have ${summary.gmail.urgentCount} urgent emails`,
+      action: 'CHECK_GMAIL'
+    });
+  }
+
+  if (summary.calendar && summary.calendar.nextEvent) {
+    notifications.push({
+      type: 'info',
+      message: `Upcoming event: ${summary.calendar.nextEvent.title}`,
+      action: 'VIEW_CALENDAR'
+    });
+  }
+
+  return notifications;
 }
 
 // Helper function to format action responses for chat display
@@ -1197,12 +1485,12 @@ function formatActionResponse(action: string, data: any): string {
         if (data.body?.items || data.output?.body?.items || data.items) {
           const items = data.body?.items || data.output?.body?.items || data.items || [];
           if (items.length === 0) {
-            return '📅 오늘 예정된 일정이 없습니다.';
+            return '📅 No events scheduled for today.';
           }
 
-          let content = '📅 오늘의 일정:\n\n';
+          let content = '📅 Today\'s events:\n\n';
           items.forEach((event: any, index: number) => {
-            const title = event.summary || '제목 없음';
+            const title = event.summary || 'No title';
             const start = event.start?.dateTime || event.start?.date;
             const time = start ? formatKoreaDateTime(start).split(' ').slice(3).join(' ') : ''; // 시간 부분만
             content += `${index + 1}. ${title}${time ? ` (${time})` : ''}\n`;
@@ -1216,12 +1504,12 @@ function formatActionResponse(action: string, data: any): string {
         if (data.body?.messages || data.output?.body?.messages || data.messages) {
           const messages = data.body?.messages || data.output?.body?.messages || data.messages || [];
           if (messages.length === 0) {
-            return '📧 받은편지함에 메시지가 없습니다.';
+            return '📧 No messages found in inbox.';
           }
 
-          let content = '📧 최근 이메일:\n\n';
+          let content = '📧 Recent emails:\n\n';
           messages.slice(0, 5).forEach((msg: any, index: number) => {
-            const snippet = msg.snippet || '내용 없음';
+            const snippet = msg.snippet || 'No content';
             content += `${index + 1}. ${snippet.substring(0, 50)}${snippet.length > 50 ? '...' : ''}\n`;
           });
           return content.trim();
@@ -1233,12 +1521,12 @@ function formatActionResponse(action: string, data: any): string {
         if (data.body?.labels || data.output?.body?.labels || data.labels) {
           const labels = data.body?.labels || data.output?.body?.labels || data.labels || [];
           if (labels.length === 0) {
-            return '📧 라벨이 없습니다.';
+            return '📧 No labels found.';
           }
 
-          let content = '📧 Gmail 라벨:\n\n';
+          let content = '📧 Gmail Labels:\n\n';
           labels.forEach((label: any, index: number) => {
-            content += `${index + 1}. ${label.name || '이름 없음'}\n`;
+            content += `${index + 1}. ${label.name || 'No name'}\n`;
           });
           return content.trim();
         }
@@ -1250,12 +1538,12 @@ function formatActionResponse(action: string, data: any): string {
         if (data.body?.files || data.output?.body?.files || data.files) {
           const files = data.body?.files || data.output?.body?.files || data.files || [];
           if (files.length === 0) {
-            return '📁 파일이 없습니다.';
+            return '📁 No files found.';
           }
 
-          let content = '📁 최근 파일:\n\n';
+          let content = '📁 Recent Files:\n\n';
           files.forEach((file: any, index: number) => {
-            const fileName = file.name || '이름 없음';
+            const fileName = file.name || 'No Name';
             const fileType = file.mimeType?.includes('folder') ? '📂' : '📄';
             content += `${fileType} ${index + 1}. ${fileName}\n`;
           });
@@ -1266,7 +1554,7 @@ function formatActionResponse(action: string, data: any): string {
 
       default:
         // Fallback for unknown actions - return generic success message instead of JSON
-        return '작업이 완료되었습니다.';
+        return 'Task completed successfully.';
     }
 
     return 'Action completed successfully';

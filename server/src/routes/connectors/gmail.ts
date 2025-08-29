@@ -118,7 +118,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
           <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
             <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
-            <p style="color: #dc2626; margin-bottom: 16px;">Gmail 연결에 실패했습니다: ${errorMessage}</p>
+            <p style="color: #dc2626; margin-bottom: 16px;">Gmail connection failed: ${errorMessage}</p>
             <script>
               window.opener?.postMessage({ type: 'gmail_auth_error', error: '${errorMessage}' }, '*');
               window.close();
@@ -137,7 +137,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
           <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
             <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
-            <p style="color: #dc2626; margin-bottom: 16px;">인증 코드가 누락되었습니다.</p>
+            <p style="color: #dc2626; margin-bottom: 16px;">Authorization code is missing.</p>
             <script>
               window.opener?.postMessage({ type: 'gmail_auth_error', error: 'Missing authorization code' }, '*');
               window.close();
@@ -158,7 +158,7 @@ router.get('/callback', async (req: Request, res: Response) => {
           <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
             <div style="text-align: center; padding: 20px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca;">
               <h2 style="color: #dc2626; margin-bottom: 16px;">Connection Failed</h2>
-              <p style="color: #dc2626; margin-bottom: 16px;">사용자 정보가 없습니다.</p>
+              <p style="color: #dc2626; margin-bottom: 16px;">User information is missing.</p>
               <script>
                 window.opener?.postMessage({ type: 'gmail_auth_error', error: 'Unauthorized' }, '*');
                 window.close();
@@ -216,7 +216,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
           <div style="text-align: center; padding: 20px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0;">
             <h2 style="color: #059669; margin-bottom: 16px;">✅ Connected!</h2>
-            <p style="color: #059669; margin-bottom: 16px;">Gmail이 성공적으로 연결되었습니다.</p>
+            <p style="color: #059669; margin-bottom: 16px;">Gmail connected successfully.</p>
             <script>
               window.opener?.postMessage({ type: 'gmail_auth_success' }, '*');
               window.close();

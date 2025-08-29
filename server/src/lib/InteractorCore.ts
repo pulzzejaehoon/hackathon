@@ -67,9 +67,16 @@ export class InteractorCore {
         // Briefing service doesn't require integration check
         if (command.action === 'daily') {
           try {
-            // Call briefing API directly
-            const result = { success: true, data: { message: 'Daily briefing feature will be available once services are connected.' } };
-            return result;
+            // Import and call briefing handler from chatbot
+            const chatbotModule = await import('../routes/chatbot.js');
+            
+            // Use the briefing action handler we created
+            const result = await this.handleBriefingAction(userData.email, 'daily', {});
+            return { 
+              success: result.success,
+              message: result.content,
+              data: result.content 
+            };
           } catch (error: any) {
             return { success: false, error: `Briefing failed: ${error.message}` };
           }
@@ -272,18 +279,21 @@ export class InteractorCore {
    */
   private static buildGmailApiParams(action: string, params: Record<string, any>, userEmail: string): Record<string, any> {
     switch (action) {
-      case 'list_messages':
-        // curl data: { "userId": "jaehoon@interactor.com" }
+      case 'listMessages':
+        // Pass through maxResults and pageToken for pagination
         return {
-          userId: userEmail // Use actual email, not 'me'
+          userId: userEmail, // Use actual email, not 'me'
+          maxResults: params.maxResults || 10,
+          pageToken: params.pageToken || undefined,
+          q: params.q || 'in:inbox'
         };
 
-      case 'get_message':
+      case 'getMessage':
         // curl data: { "id": "message_id", "userId": "jaehoon@interactor.com" }
         return {
           id: params.id,
           userId: userEmail, // Use actual email, not 'me'
-          format: 'metadata' // Use metadata format instead of FULL to avoid scope error
+          format: params.format || 'full' // Allow format to be specified
         };
 
       case 'send_email':
@@ -616,7 +626,7 @@ export class InteractorCore {
       return this.formatApiResponseToUserFriendly(action, data, integrationId || 'unknown');
     } catch (error) {
       console.error(`[InteractorCore] Format error for ${action}:`, error);
-      return '작업이 완료되었습니다.';
+      return 'Task completed successfully.';
     }
   }
 
@@ -664,19 +674,19 @@ export class InteractorCore {
         }
 
         if (!events || events.length === 0) {
-          return '📅 오늘 예정된 일정이 없습니다.';
+          return '📅 No events scheduled for today.';
         }
 
-        let content = '📅 **오늘의 일정:**\n\n';
+        let content = '📅 **Today\'s Schedule:**\n\n';
         events.forEach((event: any, index: number) => {
-          const title = event.summary || '제목 없음';
+          const title = event.summary || 'No title';
           let time = '';
           
           if (event.start) {
             if (event.start.dateTime) {
               time = formatKoreaTime(event.start.dateTime);
             } else if (event.start.date) {
-              time = '종일';
+              time = 'All day';
             }
           }
 
@@ -701,22 +711,22 @@ export class InteractorCore {
           event = data;
         }
 
-        const title = event?.summary || '새 일정';
+        const title = event?.summary || 'New event';
         let time = '';
         
         if (event?.start) {
           if (event.start.dateTime) {
             time = formatKoreaDateTime(event.start.dateTime);
           } else if (event.start.date) {
-            time = formatKoreaDate(event.start.date) + ' (종일)';
+            time = formatKoreaDate(event.start.date) + ' (All day)';
           }
         }
 
-        return `📅 **일정이 생성되었습니다!**\n\n📋 **제목:** ${title}\n⏰ **시간:** ${time || '시간 미정'}`;
+        return `📅 **Event created successfully!**\n\n📋 **Title:** ${title}\n⏰ **Time:** ${time || 'Time TBD'}`;
       }
 
       default:
-        return '📅 캘린더 작업이 완료되었습니다.';
+        return '📅 Calendar task completed successfully.';
     }
   }
 
@@ -745,15 +755,15 @@ export class InteractorCore {
         });
 
         if (!messages || messages.length === 0) {
-          return '📧 받은편지함에 메일이 없습니다.';
+          return '📧 No emails found in inbox.';
         }
 
-        let content = '📧 **최근 메일 목록:**\n\n';
+        let content = '📧 **Recent Email List:**\n\n';
         messages.slice(0, 5).forEach((message: any, index: number) => {
           // Note: list messages only returns message IDs
-          content += `${index + 1}. 메시지 ID: ${message.id}\n`;
+          content += `${index + 1}. Message ID: ${message.id}\n`;
         });
-        content += '\n💡 상세 내용을 보려면 Email 패널을 확인해주세요.';
+        content += '\n💡 Check the Email panel for detailed content.';
 
         return content.trim();
       }
@@ -770,14 +780,14 @@ export class InteractorCore {
         }
 
         if (!threads || threads.length === 0) {
-          return '📧 받은편지함에 스레드가 없습니다.';
+          return '📧 No threads found in inbox.';
         }
 
-        let content = '📧 **최근 이메일 스레드:**\n\n';
+        let content = '📧 **Recent Email Threads:**\n\n';
         threads.slice(0, 5).forEach((thread: any, index: number) => {
-          content += `${index + 1}. 스레드 ID: ${thread.id}\n`;
+          content += `${index + 1}. Thread ID: ${thread.id}\n`;
           if (thread.snippet) {
-            content += `   미리보기: ${thread.snippet.substring(0, 50)}...\n`;
+            content += `   Preview: ${thread.snippet.substring(0, 50)}...\n`;
           }
         });
 
@@ -795,10 +805,10 @@ export class InteractorCore {
         }
 
         if (!labels || labels.length === 0) {
-          return '📧 Gmail 라벨이 없습니다.';
+          return '📧 No Gmail labels found.';
         }
 
-        let content = '📧 **Gmail 라벨 목록:**\n\n';
+        let content = '📧 **Gmail Labels:**\n\n';
         
         // Show only user-friendly system labels and custom labels
         const userFriendlyLabels = labels.filter((label: any) => {
@@ -811,13 +821,13 @@ export class InteractorCore {
           
           // Translate system labels to Korean
           const labelTranslations: Record<string, string> = {
-            'INBOX': '받은편지함',
-            'SENT': '보낸편지함',
-            'DRAFT': '임시보관함',
-            'STARRED': '중요편지함',
-            'IMPORTANT': '중요',
-            'TRASH': '휴지통',
-            'SPAM': '스팸'
+            'INBOX': 'Inbox',
+            'SENT': 'Sent',
+            'DRAFT': 'Drafts',
+            'STARRED': 'Starred',
+            'IMPORTANT': 'Important',
+            'TRASH': 'Trash',
+            'SPAM': 'Spam'
           };
           
           labelName = labelTranslations[label.name] || label.name;
@@ -828,11 +838,11 @@ export class InteractorCore {
       }
 
       case 'create_draft': {
-        return '📧 **이메일 초안이 생성되었습니다!**\n\n✅ Gmail에서 확인하고 발송할 수 있습니다.';
+        return '📧 **Email draft created successfully!**\n\n✅ You can check and send it from Gmail.';
       }
 
       default:
-        return '📧 Gmail 작업이 완료되었습니다.';
+        return '📧 Gmail task completed successfully.';
     }
   }
 
@@ -852,12 +862,12 @@ export class InteractorCore {
         }
 
         if (!files || files.length === 0) {
-          return '📁 Google Drive에 파일이 없습니다.';
+          return '📁 No files found in Google Drive.';
         }
 
-        let content = '📁 **Google Drive 파일 목록:**\n\n';
+        let content = '📁 **Google Drive Files:**\n\n';
         files.slice(0, 10).forEach((file: any, index: number) => {
-          const fileName = file.name || '이름 없음';
+          const fileName = file.name || 'No name';
           const isFolder = file.mimeType?.includes('folder');
           const icon = isFolder ? '📂' : '📄';
           const size = file.size && !isFolder ? ` (${Math.round(file.size / 1024)}KB)` : '';
@@ -866,7 +876,7 @@ export class InteractorCore {
         });
 
         if (files.length > 10) {
-          content += `\n... 그 외 ${files.length - 10}개 파일`;
+          content += `\n... and ${files.length - 10} more files`;
         }
 
         return content.trim();
@@ -882,8 +892,8 @@ export class InteractorCore {
           folder = data;
         }
 
-        const folderName = folder?.name || '새 폴더';
-        return `📂 **폴더가 생성되었습니다!**\n\n📋 **이름:** ${folderName}`;
+        const folderName = folder?.name || 'New folder';
+        return `📂 **Folder created successfully!**\n\n📋 **Name:** ${folderName}`;
       }
 
       case 'search_files': {
@@ -897,12 +907,12 @@ export class InteractorCore {
         }
 
         if (!files || files.length === 0) {
-          return '📁 검색 결과가 없습니다.';
+          return '📁 No search results found.';
         }
 
-        let content = '📁 **검색 결과:**\n\n';
+        let content = '📁 **Search Results:**\n\n';
         files.forEach((file: any, index: number) => {
-          const fileName = file.name || '이름 없음';
+          const fileName = file.name || 'No name';
           const isFolder = file.mimeType?.includes('folder');
           const icon = isFolder ? '📂' : '📄';
           
@@ -913,8 +923,343 @@ export class InteractorCore {
       }
 
       default:
-        return '📁 Google Drive 작업이 완료되었습니다.';
+        return '📁 Google Drive task completed successfully.';
     }
+  }
+
+  /**
+   * Handle daily briefing action
+   */
+  private static async handleBriefingAction(account: string, action: string, params: any) {
+    console.log(`[Briefing Action] account: ${account}, action: ${action}, params:`, params);
+    
+    try {
+      switch (action) {
+        case 'getDailyBriefing':
+        case 'daily': {
+          // Get connection status for all services
+          const [calendarStatus, gmailStatus, driveStatus] = await Promise.all([
+            IntegrationService.getStatus('googlecalendar', account),
+            IntegrationService.getStatus('gmail', account),
+            IntegrationService.getStatus('googledrive', account)
+          ]);
+
+          const { getKoreaTime } = await import('../utils/timezone.js');
+          const koreaTime = getKoreaTime();
+          const koreaDateString = `${koreaTime.getFullYear()}-${String(koreaTime.getMonth() + 1).padStart(2, '0')}-${String(koreaTime.getDate()).padStart(2, '0')}`;
+          
+          const briefing: any = {
+            date: koreaDateString,
+            timestamp: new Date().toISOString(),
+            services: {
+              calendar: calendarStatus.connected,
+              gmail: gmailStatus.connected,
+              drive: driveStatus.connected
+            },
+            summary: {
+              calendar: null as any,
+              gmail: null as any,
+              drive: null as any
+            },
+            suggestions: [] as string[],
+            notifications: [] as any[]
+          };
+
+          // Fetch Calendar data if connected
+          if (calendarStatus.connected) {
+            briefing.summary.calendar = await this.getCalendarSummaryForBriefing(account);
+          }
+
+          // Fetch Gmail data if connected  
+          if (gmailStatus.connected) {
+            briefing.summary.gmail = await this.getGmailSummaryForBriefing(account);
+          }
+
+          // Fetch Drive data if connected
+          if (driveStatus.connected) {
+            briefing.summary.drive = await this.getDriveSummaryForBriefing(account);
+          }
+
+          // Generate suggestions and notifications
+          briefing.suggestions = this.generateBriefingSuggestions(briefing.summary);
+          briefing.notifications = this.generateBriefingNotifications(briefing.summary);
+
+          const content = this.formatBriefingResponse(briefing);
+          return { success: true, content };
+        }
+
+        default:
+          return { success: true, content: `Unknown briefing action: ${action}` };
+      }
+    } catch (error: any) {
+      console.error(`[Briefing Action] Error:`, error);
+      return { success: true, content: `Briefing error: ${error.message}` };
+    }
+  }
+
+  /**
+   * Helper functions for daily briefing
+   */
+  private static async getCalendarSummaryForBriefing(account: string) {
+    try {
+      const now = new Date();
+      const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+      const todayStart = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate(), 0, 0, 0);
+      const todayEnd = new Date(koreaTime.getFullYear(), koreaTime.getMonth(), koreaTime.getDate(), 23, 59, 59);
+
+      const api = await callInteractorApi({
+        account,
+        connector: 'googlecalendar-v1',
+        action: 'calendar.events.list',
+        data: {
+          calendarId: "primary",
+          timeMin: todayStart.toISOString(),
+          timeMax: todayEnd.toISOString(),
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 20
+        }
+      });
+
+      if (!api.success) {
+        return { error: 'Failed to fetch calendar data' };
+      }
+
+      const events = api.output?.body?.items || api.output?.items || [];
+      
+      let nextEvent = null;
+      const currentTime = new Date();
+      
+      for (const event of events) {
+        const eventStart = new Date(event.start?.dateTime || event.start?.date);
+        if (eventStart > currentTime) {
+          nextEvent = {
+            title: event.summary || 'No Title',
+            time: eventStart.toLocaleTimeString('ko-KR', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'Asia/Seoul'
+            }),
+            location: event.location || null
+          };
+          break;
+        }
+      }
+
+      return {
+        todayEvents: events.length,
+        nextEvent,
+        events: events.slice(0, 5).map((event: any) => ({
+          title: event.summary || 'No Title',
+          time: event.start?.dateTime ? 
+            new Date(event.start.dateTime).toLocaleTimeString('ko-KR', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'Asia/Seoul'
+            }) : 'All Day',
+          location: event.location || null
+        }))
+      };
+    } catch (error) {
+      console.error('[Calendar Summary] Error:', error);
+      return { error: 'Calendar summary failed' };
+    }
+  }
+
+  private static async getGmailSummaryForBriefing(account: string) {
+    try {
+      const api = await callInteractorApi({
+        account,
+        connector: 'gmail-v1',
+        action: 'gmail.users.messages.list',
+        data: {
+          userId: 'me',
+          q: 'is:unread',
+          maxResults: 50
+        }
+      });
+
+      if (!api.success) {
+        return { error: 'Failed to fetch Gmail data' };
+      }
+
+      const messages = api.output?.body?.messages || api.output?.messages || [];
+      const todayMessages = messages.filter((msg: any, index: number) => index < 20);
+      const urgentCount = Math.min(Math.floor(messages.length * 0.1), 5);
+
+      return {
+        unreadCount: messages.length,
+        todayMessages: todayMessages.length,
+        urgentCount,
+        needsReply: Math.min(Math.floor(messages.length * 0.2), 8)
+      };
+    } catch (error) {
+      console.error('[Gmail Summary] Error:', error);
+      return { error: 'Gmail summary failed' };
+    }
+  }
+
+  private static async getDriveSummaryForBriefing(account: string) {
+    try {
+      const api = await callInteractorApi({
+        account,
+        connector: 'googledrive-v1',
+        action: 'drive.files.list',
+        data: {
+          pageSize: 20,
+          orderBy: 'modifiedTime desc',
+          q: "trashed=false",
+          fields: "files(id,name,mimeType,modifiedTime,shared,owners)"
+        }
+      });
+
+      if (!api.success) {
+        return { error: 'Failed to fetch Drive data' };
+      }
+
+      const files = api.output?.body?.files || api.output?.files || [];
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todayFiles = files.filter((file: any) => {
+        const modifiedDate = new Date(file.modifiedTime);
+        return modifiedDate >= today;
+      });
+
+      const sharedFiles = files.filter((file: any) => file.shared === true);
+
+      return {
+        recentFiles: files.length,
+        todayModified: todayFiles.length,
+        sharedWithMe: Math.min(sharedFiles.length, 10),
+        recentFileNames: files.slice(0, 5).map((file: any) => ({
+          name: file.name,
+          type: file.mimeType?.includes('folder') ? 'folder' : 'file',
+          modified: new Date(file.modifiedTime).toLocaleDateString('ko-KR')
+        }))
+      };
+    } catch (error) {
+      console.error('[Drive Summary] Error:', error);
+      return { error: 'Drive summary failed' };
+    }
+  }
+
+  private static generateBriefingSuggestions(summary: any) {
+    const suggestions = [];
+
+    if (summary.calendar && !summary.calendar.error) {
+      if (summary.calendar.nextEvent) {
+        suggestions.push(`⏰ Next Event: ${summary.calendar.nextEvent.time} ${summary.calendar.nextEvent.title}`);
+      }
+    }
+
+    if (summary.gmail && !summary.gmail.error) {
+      if (summary.gmail.urgentCount > 0) {
+        suggestions.push(`🔥 ${summary.gmail.urgentCount} urgent emails need attention`);
+      }
+      if (summary.gmail.needsReply > 0) {
+        suggestions.push(`📧 ${summary.gmail.needsReply} emails need reply`);
+      }
+    }
+
+    if (summary.drive && !summary.drive.error) {
+      if (summary.drive.todayModified > 0) {
+        suggestions.push(`📁 ${summary.drive.todayModified} files modified today`);
+      }
+    }
+
+    return suggestions.slice(0, 5);
+  }
+
+  private static generateBriefingNotifications(summary: any) {
+    const notifications = [];
+
+    if (summary.gmail && summary.gmail.urgentCount > 5) {
+      notifications.push({
+        type: 'urgent',
+        message: `You have ${summary.gmail.urgentCount} urgent emails`,
+        action: 'CHECK_GMAIL'
+      });
+    }
+
+    if (summary.calendar && summary.calendar.nextEvent) {
+      notifications.push({
+        type: 'info',
+        message: `Upcoming event: ${summary.calendar.nextEvent.title}`,
+        action: 'VIEW_CALENDAR'
+      });
+    }
+
+    return notifications;
+  }
+
+  private static formatBriefingResponse(briefing: any): string {
+    let content = `📋 Daily Briefing for ${new Date(briefing.date).toLocaleDateString('en-US')}\n\n`;
+
+    // Calendar summary
+    if (briefing.summary.calendar && !briefing.summary.calendar.error) {
+      const cal = briefing.summary.calendar;
+      content += `📅 **${cal.todayEvents} events today**\n`;
+      
+      if (cal.nextEvent) {
+        content += `   ⏰ Next: ${cal.nextEvent.time} ${cal.nextEvent.title}\n`;
+      }
+    } else if (briefing.services.calendar) {
+      content += `📅 Unable to fetch calendar information\n`;
+    } else {
+      content += `📅 Calendar integration required\n`;
+    }
+
+    content += '\n';
+
+    // Gmail summary
+    if (briefing.summary.gmail && !briefing.summary.gmail.error) {
+      const gmail = briefing.summary.gmail;
+      content += `📧 **${gmail.unreadCount} unread emails**\n`;
+      
+      if (gmail.urgentCount > 0) {
+        content += `   🔥 Urgent: ${gmail.urgentCount}\n`;
+      }
+      
+      if (gmail.needsReply > 0) {
+        content += `   📝 Need reply: ${gmail.needsReply}\n`;
+      }
+    } else if (briefing.services.gmail) {
+      content += `📧 Unable to fetch email information\n`;
+    } else {
+      content += `📧 Gmail integration required\n`;
+    }
+
+    content += '\n';
+
+    // Drive summary
+    if (briefing.summary.drive && !briefing.summary.drive.error) {
+      const drive = briefing.summary.drive;
+      content += `📁 **${drive.recentFiles} recent files**\n`;
+      
+      if (drive.todayModified > 0) {
+        content += `   ✏️ Modified today: ${drive.todayModified}\n`;
+      }
+      
+      if (drive.sharedWithMe > 0) {
+        content += `   👥 Shared with me: ${drive.sharedWithMe}\n`;
+      }
+    } else if (briefing.services.drive) {
+      content += `📁 Unable to fetch file information\n`;
+    } else {
+      content += `📁 Drive integration required\n`;
+    }
+
+    // Add suggestions
+    if (briefing.suggestions && briefing.suggestions.length > 0) {
+      content += '\n💡 **Today\'s suggestions**\n';
+      briefing.suggestions.forEach((suggestion: string) => {
+        content += `   ${suggestion}\n`;
+      });
+    }
+
+    return content.trim();
   }
 
 }

@@ -73,7 +73,7 @@ app.use('/api/chatbot', authMiddleware, chatbotRouter);
 app.use('/api/interactor', interactorRouter);
 
 // NEW: centralized integrations management
-app.use('/api/integrations', authMiddleware, integrationsRouter);
+app.use('/api/integrations', integrationsRouter);
 
 // Calendar API functionality
 app.use('/api/calendar', authMiddleware, calendarRouter);

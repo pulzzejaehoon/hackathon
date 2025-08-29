@@ -22,7 +22,7 @@ router.get('/auth-url', async (req: Request, res: Response) => {
       return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
     }
 
-    const url = `${INTERACTOR_BASE_URL}/connector/interactor/drive-v1/auth-url?account=${encodeURIComponent(account)}`;
+    const url = `${INTERACTOR_BASE_URL}/connector/interactor/googledrive-v1/auth-url?account=${encodeURIComponent(account)}`;
 
     const interactorResp = await axios.get(url, {
       headers: {
@@ -73,7 +73,7 @@ router.post('/disconnect', async (req: Request, res: Response) => {
     // TODO: Replace with actual Interactor API call to revoke token
     // This is a placeholder. You'll need to consult Interactor's documentation
     // for the correct endpoint and method to revoke a token.
-    const disconnectResult = await axios.post(`${INTERACTOR_BASE_URL}/connector/interactor/drive-v1/disconnect`, {
+    const disconnectResult = await axios.post(`${INTERACTOR_BASE_URL}/connector/interactor/googledrive-v1/disconnect`, {
       account,
     }, {
       headers: {
@@ -126,7 +126,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     // Exchange code for token with Interactor
-    const tokenExchangeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/drive-v1/token`;
+    const tokenExchangeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/googledrive-v1/token`;
     const tokenExchangeResp = await axios.post(tokenExchangeUrl, {
       code,
       account,

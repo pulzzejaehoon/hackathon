@@ -308,19 +308,60 @@ export class IntegrationService {
     }
 
     try {
-      console.log(`[IntegrationService] Disconnecting ${integrationId} for ${userEmail} (local cache clear only)`);
+      console.log(`[IntegrationService] Disconnecting ${integrationId} for ${userEmail}`);
       
-      // Clear cache for this user's integration status to force reconnection
+      // Clear cache for this user's integration status
       const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
       this.statusCache.delete(cacheKey);
       
-      // NOTE: We're not calling Interactor's revoke API as it may not exist or is undocumented.
-      // Users will need to manually revoke access through their Google/service settings if needed.
-      // The local cache clearing will require them to reconnect via OAuth.
+      // Try to revoke access via Interactor API
+      if (INTERACTOR_API_KEY) {
+        try {
+          // Different revoke endpoints per service
+          let revokeUrl = '';
+          switch (integrationId) {
+            case 'googlecalendar':
+            case 'gmail':
+            case 'googledrive':
+              revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
+              break;
+            default:
+              // For services without specific revoke endpoint, just clear cache
+              break;
+          }
+          
+          if (revokeUrl) {
+            const response = await retryWithBackoff(async () => {
+              return await axios.post(revokeUrl, {}, {
+                params: { account: userEmail.toLowerCase().trim() },
+                headers: {
+                  'x-api-key': String(INTERACTOR_API_KEY),
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'AI-Agent-SaaS/1.0'
+                },
+                timeout: 10000,
+                validateStatus: (status) => status < 500 // Don't retry on 4xx errors
+              });
+            });
+            
+            console.log(`[IntegrationService] ${integrationId} revoke API call - HTTP ${response.status}`);
+          }
+        } catch (revokeError: any) {
+          console.warn(`[IntegrationService] Failed to revoke ${integrationId} via API:`, revokeError.message);
+          // Continue even if revoke fails - local cache clear is enough for UI
+        }
+      }
+      
+      // Cache a disconnected status to force UI update
+      this.statusCache.set(cacheKey, {
+        status: { ok: true, connected: false },
+        timestamp: Date.now(),
+        ttl: this.CACHE_TTL
+      });
       
       return { 
         ok: true, 
-        message: `${integration.name} disconnected locally. You may need to revoke access in your account settings for complete disconnection.` 
+        message: `${integration.name} disconnected successfully. You may need to revoke access in your account settings for complete disconnection.` 
       };
     } catch (error: any) {
       console.error(`[IntegrationService] Disconnect error for ${integrationId}:`, error.message);
