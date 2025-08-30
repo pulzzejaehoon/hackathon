@@ -527,18 +527,27 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
     const account = (req as any).user?.email;
     
     if (!account) {
+      console.error('[Slack Users List] No account found');
       return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
     }
 
+    console.log('[Slack Users List] Checking Slack connection for account:', account);
     const status = await IntegrationService.getStatus('slack', account);
+    console.log('[Slack Users List] Slack connection status:', status);
+    
     if (!status.connected) {
+      console.error('[Slack Users List] Slack not connected for account:', account);
       return res.status(400).json({ 
         ok: false, 
         error: 'Slack not connected. Please connect first.' 
       });
     }
 
+    console.log('[Slack Users List] Calling user.list API directly...');
+    
     const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/user.list/execute';
+    console.log('[Slack Users List] Using URL:', url);
+    
     const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
       method: 'POST',
       headers: {
@@ -547,6 +556,8 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
       },
       body: JSON.stringify({})
     });
+
+    console.log('[Slack Users List] API response status:', response.status);
 
     if (!response.ok) {
       const errorData = await response.text();
@@ -558,15 +569,29 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
     }
 
     const data = await response.json();
+    console.log('[Slack Users List] Raw API response:', JSON.stringify(data, null, 2));
     
     if (!data.output || !data.output.users) {
-      console.error('[Slack Users List] API returned error or missing data:', data);
+      console.error('[Slack Users List] API returned error or missing users data:', data);
+      
+      // Check if there's any useful information in the response
+      if (data.output && Object.keys(data.output).length > 0) {
+        console.log('[Slack Users List] Output contains keys:', Object.keys(data.output));
+      }
+      
+      // Return error but with more information
       return res.status(502).json({ 
         ok: false, 
-        error: 'Failed to fetch users from Slack' 
+        error: 'Slack API returned empty user list. This usually means the Slack connection needs to be refreshed or the workspace has no accessible users.',
+        details: {
+          hasOutput: !!data.output,
+          outputKeys: data.output ? Object.keys(data.output) : [],
+          suggestion: 'Try disconnecting and reconnecting your Slack integration'
+        }
       });
     }
 
+    console.log('[Slack Users List] Found users:', data.output.users.length);
     return res.json({ ok: true, users: { members: data.output.users } });
     
   } catch (error) {
