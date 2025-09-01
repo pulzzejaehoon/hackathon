@@ -177,6 +177,8 @@ router.get('/:id/oauth-callback', async (req: Request, res: Response) => {
     // Success case - process authorization code and notify parent window
     console.log(`[Integration OAuth] Processing callback for ${id} with code: ${code?.toString().substring(0, 10)}...`);
     
+    // OAuth success - status check will now use real API calls to determine connection
+    
     // Clear any cached disconnected state for this service after OAuth success
     try {
       console.log(`[Integration OAuth] OAuth success for ${id}, clearing all cached states`);
@@ -596,70 +598,118 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
       return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
     }
 
-    console.log('[Slack Users List] Checking Slack connection for account:', account);
-    const status = await IntegrationService.getStatus('slack', account);
-    console.log('[Slack Users List] Slack connection status:', status);
+    console.log('[Slack Users List] Testing user.list API for user list');
     
-    if (!status.connected) {
-      console.error('[Slack Users List] Slack not connected for account:', account);
-      return res.status(400).json({ 
-        ok: false, 
-        error: 'Slack not connected. Please connect first.' 
-      });
-    }
-
-    console.log('[Slack Users List] Calling users.list API directly...');
-    
-    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/users.list/execute';
-    console.log('[Slack Users List] Using URL:', url);
-    
-    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
-      method: 'POST',
-      headers: {
-        'x-api-key': process.env.INTERACTOR_API_KEY!,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        limit: 100
-      })
-    });
-
-    console.log('[Slack Users List] API response status:', response.status);
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('[Slack Users List] API Error:', response.status, errorData);
-      return res.status(502).json({ 
-        ok: false, 
-        error: 'Failed to fetch users from Slack' 
-      });
-    }
-
-    const data = await response.json();
-    console.log('[Slack Users List] Raw API response:', JSON.stringify(data, null, 2));
-    
-    if (!data.output || !data.output.users) {
-      console.error('[Slack Users List] API returned error or missing users data:', data);
+    // Use the correct user.list API from the curl example
+    try {
+      const userListUrl = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/user.list/execute';
+      console.log('[Slack Users List] Trying user.list API:', userListUrl);
       
-      // Check if there's any useful information in the response
-      if (data.output && Object.keys(data.output).length > 0) {
-        console.log('[Slack Users List] Output contains keys:', Object.keys(data.output));
-      }
-      
-      // Return error but with more information
-      return res.status(502).json({ 
-        ok: false, 
-        error: 'Slack API returned empty user list. This usually means the Slack connection needs to be refreshed or the workspace has no accessible users.',
-        details: {
-          hasOutput: !!data.output,
-          outputKeys: data.output ? Object.keys(data.output) : [],
-          suggestion: 'Try disconnecting and reconnecting your Slack integration'
+      const userListResponse = await fetch(userListUrl + `?account=${encodeURIComponent(account)}`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.INTERACTOR_API_KEY!,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          limit: 100
+        })
+      });
+
+      console.log('[Slack Users List] user.list API response status:', userListResponse.status);
+
+      if (userListResponse.ok) {
+        const userListData = await userListResponse.json();
+        console.log('[Slack Users List] user.list response:', JSON.stringify(userListData, null, 2));
+        
+        if (userListData.output && userListData.output.members) {
+          // Format users properly
+          const users = userListData.output.members
+            .filter((user: any) => !user.deleted && !user.is_bot)
+            .map((user: any) => ({
+              id: user.id,
+              name: user.name || user.display_name || user.real_name || 'Unknown',
+              display_name: user.display_name || user.real_name || user.name,
+              real_name: user.real_name || user.display_name || user.name,
+              is_bot: user.is_bot || false,
+              deleted: user.deleted || false
+            }));
+          
+          return res.json({
+            ok: true,
+            users: { members: users }
+          });
         }
-      });
+      } else {
+        const errorText = await userListResponse.text();
+        console.error('[Slack Users List] user.list API error:', userListResponse.status, errorText);
+      }
+    } catch (error) {
+      console.warn('[Slack Users List] user.list failed:', error);
     }
 
-    console.log('[Slack Users List] Found users:', data.output.users.length);
-    return res.json({ ok: true, users: { members: data.output.users } });
+    // Try users.list (plural) as fallback since Slack official API uses this
+    try {
+      const usersListUrl = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/users.list/execute';
+      console.log('[Slack Users List] Trying users.list API as fallback:', usersListUrl);
+      
+      const usersListResponse = await fetch(usersListUrl + `?account=${encodeURIComponent(account)}`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.INTERACTOR_API_KEY!,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          limit: 100
+        })
+      });
+
+      console.log('[Slack Users List] users.list API response status:', usersListResponse.status);
+
+      if (usersListResponse.ok) {
+        const usersListData = await usersListResponse.json();
+        console.log('[Slack Users List] users.list response:', JSON.stringify(usersListData, null, 2));
+        
+        if (usersListData.output && usersListData.output.members) {
+          // Format users properly
+          const users = usersListData.output.members
+            .filter((user: any) => !user.deleted && !user.is_bot)
+            .map((user: any) => ({
+              id: user.id,
+              name: user.name || user.display_name || user.real_name || 'Unknown',
+              display_name: user.display_name || user.real_name || user.name,
+              real_name: user.real_name || user.display_name || user.name,
+              is_bot: user.is_bot || false,
+              deleted: user.deleted || false
+            }));
+          
+          console.log('[Slack Users List] Found users with users.list:', users.length);
+          return res.json({
+            ok: true,
+            users: { members: users }
+          });
+        }
+      } else {
+        const errorText = await usersListResponse.text();
+        console.error('[Slack Users List] users.list API error:', usersListResponse.status, errorText);
+      }
+    } catch (error) {
+      console.warn('[Slack Users List] users.list failed:', error);
+    }
+    
+    // Fallback to default suggestions
+    console.log('[Slack Users List] Using fallback suggestions');
+    const commonUsers = [
+      { id: '@channel', name: '@channel', display_name: 'Notify all members in channel', is_channel_mention: true },
+      { id: '@here', name: '@here', display_name: 'Notify active members in channel', is_channel_mention: true },
+      { id: '@everyone', name: '@everyone', display_name: 'Notify everyone in workspace', is_channel_mention: true }
+    ];
+
+    return res.json({
+      ok: true,
+      users: { members: commonUsers },
+      note: 'Specific user list not available. Use @username format for individual users.'
+    });
     
   } catch (error) {
     console.error('[Slack Users List] Error:', error);

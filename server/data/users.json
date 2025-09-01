@@ -5,8 +5,15 @@
       "email": "jaehoon@interactor.com",
       "password_hash": "$2b$12$wUayR3L0nPpSJ6EA31Gq0OegrfzpJQzyTINdPAG3C.tdRix6BsxNa",
       "created_at": "2025-09-01T05:57:04.075Z",
-      "last_login": "2025-09-01T05:57:07.858Z"
+      "last_login": "2025-09-01T16:05:41.333Z"
+    },
+    {
+      "id": 2,
+      "email": "test@example.com",
+      "password_hash": "$2b$12$DTVYotti5GTtfxgyCOmAHObr5S.FjX.gyq33MmsbToVMXdBEMYSAK",
+      "created_at": "2025-09-01T15:34:31.151Z",
+      "last_login": null
     }
   ],
-  "lastId": 1
+  "lastId": 2
 }

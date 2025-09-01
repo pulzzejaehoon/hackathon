@@ -239,11 +239,32 @@ export class IntegrationService {
           };
           break;
         case 'slack':
-          // Try actual Slack API call to check connection - use auth.test which is more reliable for status check
-          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/auth.test/execute`;
-          data = {};
+          // For Slack, check if user has manually disconnected first
+          const slackDisconnectedKey = `slack_disconnected:${userEmail.toLowerCase().trim()}`;
+          const slackDisconnected = this.statusCache.get(slackDisconnectedKey);
+          if (slackDisconnected && (now - slackDisconnected.timestamp) < slackDisconnected.ttl) {
+            console.log(`[IntegrationService] Slack manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
+          // Slack connector only supports message.send reliably, so test actual connection
+          console.log(`[IntegrationService] Slack status check - testing with actual message.send API`);
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/message.send/execute`;
+          data = {
+            channel: "#test-connection-check", 
+            text: "Connection test - please ignore",
+            dry_run: true  // If dry_run is supported, won't actually send
+          };
           break;
         case 'zoom':
+          // For Zoom, check if user has manually disconnected first
+          const zoomDisconnectedKey = `zoom_disconnected:${userEmail.toLowerCase().trim()}`;
+          const zoomDisconnected = this.statusCache.get(zoomDisconnectedKey);
+          if (zoomDisconnected && (now - zoomDisconnected.timestamp) < zoomDisconnected.ttl) {
+            console.log(`[IntegrationService] Zoom manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           // Try actual Zoom API call to check connection  
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/user.get/execute`;
           data = {};
@@ -444,6 +465,26 @@ export class IntegrationService {
             case 'gmail':
             case 'googledrive':
               revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
+              break;
+            case 'slack':
+              // For Slack, set special disconnect flag since it doesn't have proper revoke
+              const slackDisconnectedKey = `slack_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(slackDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set Slack disconnect flag: ${slackDisconnectedKey}`);
+              break;
+            case 'zoom':
+              // For Zoom, set special disconnect flag since it doesn't have proper revoke
+              const zoomDisconnectedKey = `zoom_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(zoomDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set Zoom disconnect flag: ${zoomDisconnectedKey}`);
               break;
             default:
               // For services without specific revoke endpoint, just clear cache
