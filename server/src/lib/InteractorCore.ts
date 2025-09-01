@@ -99,12 +99,18 @@ export class InteractorCore {
         };
       }
 
+      // For Gmail, use the actual authenticated account from status
+      // This ensures we use the correct Gmail account that was actually authenticated
+      const accountToUse = (integrationId === 'gmail' && status.account) ? status.account : userData.email;
+      
+      console.log(`[InteractorCore] Using account: ${accountToUse} (service: ${integrationId}, jwt: ${userData.email}, status: ${status.account})`);
+
       // Step 5: Execute the API call via appropriate connector
       const result = await this.executeServiceAction(
         integrationId,
         command.action,
         command.params,
-        userData.email
+        accountToUse
       );
 
       // Return result (message already formatted in executeServiceAction)
@@ -155,6 +161,7 @@ export class InteractorCore {
       'googledrive': 'googledrive',
       'drive': 'googledrive',
       'google.drive': 'googledrive',
+      'slack': 'slack',
     };
 
     return serviceMap[service.toLowerCase()] || null;
@@ -283,11 +290,12 @@ export class InteractorCore {
    * Builds Gmail API parameters matching EXACT curl format provided by user
    */
   private static buildGmailApiParams(action: string, params: Record<string, any>, userEmail: string): Record<string, any> {
+    console.log(`[InteractorCore] buildGmailApiParams called with action: ${action}, userEmail: ${userEmail}, originalParams:`, params);
     switch (action) {
-      case 'listMessages':
+      case 'list_messages':
         // Pass through maxResults and pageToken for pagination
-        return {
-          userId: userEmail, // Use actual email, not 'me'
+        const result = {
+          userId: 'me', // Gmail API always uses 'me' for authenticated user
           maxResults: params.maxResults || 10,
           pageToken: params.pageToken || undefined,
           q: params.q || 'in:inbox',
@@ -295,12 +303,14 @@ export class InteractorCore {
           // To get subjects, we need to fetch individual messages or use threads.list
           includeSpamTrash: false
         };
+        console.log(`[InteractorCore] buildGmailApiParams result for listMessages:`, result);
+        return result;
 
-      case 'getMessage':
+      case 'get_message':
         // curl data: { "id": "message_id", "userId": "jaehoon@interactor.com" }
         return {
           id: params.id,
-          userId: userEmail, // Use actual email, not 'me'
+          userId: 'me', // Gmail API always uses 'me' for authenticated user
           format: params.format || 'full' // Allow format to be specified
         };
 
@@ -316,7 +326,7 @@ export class InteractorCore {
         // For draft creation, build RFC822 and wrap in resource
         const draftMessage = InteractorCore.buildRFC822Message(params, userEmail);
         return {
-          userId: userEmail,
+          userId: 'me',
           resource: {
             message: {
               raw: draftMessage
@@ -327,14 +337,14 @@ export class InteractorCore {
       case 'list_threads':
         // Similar to list_messages
         return {
-          userId: userEmail
+          userId: 'me'
         };
 
       default:
-        // For other Gmail actions, use actual email
+        // For other Gmail actions, use 'me' for consistency
         return {
           ...params,
-          userId: userEmail
+          userId: 'me'
         };
     }
   }
@@ -489,6 +499,12 @@ export class InteractorCore {
         'upload_file': 'drive.files.create',
         'delete_file': 'drive.files.delete'
       },
+      'slack': {
+        'send_message': 'chat.postMessage',
+        'list_users': 'users.list',
+        'list_channels': 'channels.list',
+        'get_user': 'users.info'
+      },
     };
 
     return actionMaps[integrationId]?.[action] || null;
@@ -621,6 +637,19 @@ export class InteractorCore {
       'getDailyBriefing': {
         service: 'briefing',
         action: 'daily',
+        defaultParams: {}
+      },
+      'sendSlackMessage': {
+        service: 'slack',
+        action: 'send_message',
+        defaultParams: {
+          channel: '#general',
+          text: ''
+        }
+      },
+      'listSlackUsers': {
+        service: 'slack',
+        action: 'list_users',
         defaultParams: {}
       },
     };
@@ -1067,7 +1096,9 @@ export class InteractorCore {
 
           // Fetch Gmail data if connected  
           if (gmailStatus.connected) {
-            briefing.summary.gmail = await this.getGmailSummaryForBriefing(account);
+            // Use actual authenticated Gmail account, not JWT account
+            const gmailAccount = gmailStatus.account || account;
+            briefing.summary.gmail = await this.getGmailSummaryForBriefing(gmailAccount);
           }
 
           // Fetch Drive data if connected

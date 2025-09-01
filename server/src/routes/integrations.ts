@@ -177,6 +177,23 @@ router.get('/:id/oauth-callback', async (req: Request, res: Response) => {
     // Success case - process authorization code and notify parent window
     console.log(`[Integration OAuth] Processing callback for ${id} with code: ${code?.toString().substring(0, 10)}...`);
     
+    // Clear any cached disconnected state for this service after OAuth success
+    try {
+      console.log(`[Integration OAuth] OAuth success for ${id}, clearing all cached states`);
+      
+      // Clear all cache entries for this integration across all users
+      // Since we don't have user context here, we'll use a broader approach
+      const integration = IntegrationService.getIntegration(id);
+      if (integration) {
+        // Clear entire cache to ensure OAuth success is recognized immediately
+        // This is safe because cache will repopulate with fresh status checks
+        IntegrationService.clearAllCache();
+        console.log(`[Integration OAuth] Cleared all cache for ${id} OAuth success`);
+      }
+    } catch (error) {
+      console.warn(`[Integration OAuth] Failed to clear cache for ${id}:`, error);
+    }
+    
     return res.send(`
       <!DOCTYPE html>
       <html>
@@ -259,6 +276,7 @@ router.post('/:id/refresh-status', authMiddleware, async (req: Request, res: Res
   try {
     const { id } = req.params;
     const account = (req as any).user?.email;
+    const { clearCache } = req.body; // Optional parameter to force cache clear
     
     if (!account) {
       return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
@@ -273,12 +291,58 @@ router.post('/:id/refresh-status', authMiddleware, async (req: Request, res: Res
     // Clear cache for this integration
     const cacheKey = `${id}:${account.toLowerCase().trim()}`;
     (IntegrationService as any).statusCache.delete(cacheKey);
+    console.log(`[Integrations] Refresh-status: Cleared cache for ${id}:${account}`);
     
-    // Get fresh status
+    // For Zoom/Slack, OAuth success means connected - force connected state
+    if (id === 'zoom' || id === 'slack') {
+      const connectedResult = { ok: true, connected: true, account };
+      // Cache the connected state 
+      (IntegrationService as any).statusCache.set(cacheKey, {
+        status: connectedResult,
+        timestamp: Date.now(),
+        ttl: 60 * 1000 // 1 minute
+      });
+      console.log(`[Integrations] Refresh-status: Force connected state for ${id}`);
+      return res.json(connectedResult);
+    }
+    
+    // Get fresh status for other services
     const result = await IntegrationService.getStatus(id, account);
+    console.log(`[Integrations] Refresh-status result for ${id}:`, result);
     return res.json(result);
   } catch (error: any) {
     console.error('[Integrations] Refresh status error:', error);
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * POST /api/integrations/:id/clear-cache
+ * Clear cache for specific integration to handle account switching
+ */
+router.post('/:id/clear-cache', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const account = (req as any).user?.email;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    // Clear cache for this specific integration and user
+    IntegrationService.clearIntegrationUserCache(id, account);
+    
+    console.log(`[Integrations] Cache cleared for ${id}:${account}`);
+    
+    return res.json({ 
+      ok: true, 
+      message: `Cache cleared for ${id}` 
+    });
+  } catch (error: any) {
+    console.error('[Integrations] Clear cache error:', error);
     return res.status(500).json({ 
       ok: false, 
       error: 'Internal server error' 
@@ -306,6 +370,7 @@ router.get('/status/all', authMiddleware, async (req: Request, res: Response) =>
           id: integration.id,
           name: integration.name,
           connected: status.connected,
+          account: status.account, // Include account info for UI display
           category: integration.category,
           icon: integration.icon
         };
@@ -543,9 +608,9 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
       });
     }
 
-    console.log('[Slack Users List] Calling user.list API directly...');
+    console.log('[Slack Users List] Calling users.list API directly...');
     
-    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/user.list/execute';
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/slack/action/users.list/execute';
     console.log('[Slack Users List] Using URL:', url);
     
     const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
@@ -554,7 +619,9 @@ router.get('/slack/users', authMiddleware, async (req: Request, res: Response) =
         'x-api-key': process.env.INTERACTOR_API_KEY!,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({
+        limit: 100
+      })
     });
 
     console.log('[Slack Users List] API response status:', response.status);
@@ -656,6 +723,26 @@ router.post('/slack/send-message', authMiddleware, async (req: Request, res: Res
 });
 
 /**
+ * GET /api/integrations/gmail/status
+ * Check Gmail connection status - dedicated endpoint for EmailView
+ */
+router.get('/gmail/status', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    const result = await IntegrationService.getStatus('gmail', account);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('[Gmail Status] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to check Gmail status' });
+  }
+});
+
+/**
  * POST /api/integrations/gmail/send-message
  * Send email via Gmail
  */
@@ -719,6 +806,119 @@ router.post('/gmail/send-message', authMiddleware, async (req: Request, res: Res
   } catch (error: any) {
     console.error('[Gmail] Failed to send email:', error);
     return res.status(500).json({ ok: false, error: 'Failed to send email' });
+  }
+});
+
+// Testing endpoints for development
+router.post('/testing/clear-all-cache', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    IntegrationService.clearAllCache();
+    res.json({ ok: true, message: 'All cache cleared' });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: 'Failed to clear cache' });
+  }
+});
+
+router.post('/testing/force-disconnect-all', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const userEmail = user.email;
+    
+    await IntegrationService.forceDisconnectAll(userEmail);
+    res.json({ ok: true, message: 'All services force disconnected' });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: 'Failed to force disconnect all' });
+  }
+});
+
+router.get('/testing/check-status/:id/:email', async (req: Request, res: Response) => {
+  try {
+    const { id, email } = req.params;
+    const result = await IntegrationService.getStatus(id, email);
+    res.json({ service: id, email, status: result });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: 'Failed to check status' });
+  }
+});
+
+router.get('/testing/cache-state/:email', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.params;
+    const cacheState = IntegrationService.getCacheState(email);
+    res.json({ email, cacheState });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: 'Failed to get cache state' });
+  }
+});
+
+/**
+ * GET /api/integrations/gmail/messages
+ * Get Gmail messages list
+ */
+router.get('/gmail/messages', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    const { maxResults = '10', pageToken, q = 'in:inbox' } = req.query;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    // Check if Gmail is connected first
+    const status = await IntegrationService.getStatus('gmail', account);
+    if (!status.connected) {
+      return res.json({
+        ok: false,
+        error: 'Gmail not connected. Please connect Gmail first.',
+        connected: false
+      });
+    }
+
+    // Call InteractorCore to get messages
+    const { InteractorCore } = await import('../lib/InteractorCore.js');
+    
+    const command = {
+      service: 'gmail',
+      action: 'list_messages', 
+      params: {
+        maxResults: parseInt(maxResults as string),
+        pageToken: pageToken as string,
+        q: q as string
+      },
+      userId: account
+    };
+
+    const result = await InteractorCore.processCommand(command);
+    
+    if (result.success) {
+      // Extract message data from response
+      const responseBody = result.data?.output?.body || {};
+      const messages = responseBody.messages || [];
+      
+      // Return simplified response
+      res.json({
+        ok: true,
+        connected: true,
+        messages: messages,
+        nextPageToken: responseBody.nextPageToken,
+        hasMore: !!responseBody.nextPageToken,
+        account: status.account
+      });
+    } else {
+      res.status(400).json({
+        ok: false,
+        error: result.error || 'Failed to fetch messages',
+        connected: true
+      });
+    }
+
+  } catch (error: any) {
+    console.error('[Gmail Messages] Error:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: 'Internal server error',
+      connected: false
+    });
   }
 });
 

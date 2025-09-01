@@ -35,6 +35,9 @@ interface User {
   password_hash: string;
   created_at?: string;
   last_login?: string | null;
+  email_verified?: boolean;
+  verification_token?: string;
+  verification_expires?: string;
 }
 
 // Load users from file

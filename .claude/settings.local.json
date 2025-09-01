@@ -48,7 +48,11 @@
       "Read(/Users/hoon/**)",
       "Bash(git submodule update:*)",
       "Bash(git stash:*)",
-      "Read(/Users/hoon/**)"
+      "Read(/Users/hoon/**)",
+      "Bash(git tag:*)",
+      "Read(//**)",
+      "Bash(PORT=3004 npm start)",
+      "Bash(PORT=3001 npm start)"
     ],
     "deny": [],
     "ask": []

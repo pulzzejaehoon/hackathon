@@ -144,11 +144,15 @@ export class IntegrationService {
     try {
       const url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/auth-url`;
       
-      // For Slack, add redirect_uri to callback to our server
+      // For Slack and Zoom, add redirect_uri to callback to our server
       const params: any = { account: userEmail.toLowerCase().trim() };
-      if (integrationId === 'slack') {
+      if (integrationId === 'slack' || integrationId === 'zoom') {
         const backendOrigin = process.env.BACKEND_ORIGIN || 'http://localhost:3001';
-        params.redirect_uri = `${backendOrigin}/api/integrations/slack/oauth-callback`;
+        if (integrationId === 'slack') {
+          params.redirect_uri = `${backendOrigin}/api/integrations/${integrationId}/oauth-callback`;
+        } else if (integrationId === 'zoom') {
+          params.redirect_uri = `${backendOrigin}/api/integrations/${integrationId}/oauth-callback`;
+        }
       }
       
       const response = await retryWithBackoff(async () => {
@@ -220,11 +224,12 @@ export class IntegrationService {
       // Use appropriate API call for each service
       switch (integrationId) {
         case 'googlecalendar':
+          // Use calendar.calendarList.list to get all calendars including primary
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/calendar.calendarList.list/execute`;
           data = { minAccessRole: "reader" };
           break;
         case 'gmail':
-          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.labels.list/execute`;
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.getProfile/execute`;
           data = { userId: "me" };
           break;
         case 'googledrive':
@@ -234,11 +239,38 @@ export class IntegrationService {
           };
           break;
         case 'slack':
-          // Slack OAuth flow is handled by Interactor, assume connected for now
-          // In production, you'd want to verify the connection via Slack API
-          return { ok: true, connected: true };
+          // Try actual Slack API call to check connection - use auth.test which is more reliable for status check
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/auth.test/execute`;
+          data = {};
+          break;
+        case 'zoom':
+          // Try actual Zoom API call to check connection  
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/user.get/execute`;
+          data = {};
+          break;
+        case 'teams':
+          // Try actual Microsoft Teams API call to check connection
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/me/execute`;
+          data = {};
+          break;
+        case 'github':
+          // Try actual GitHub API call to check connection
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/user.get/execute`;
+          data = {};
+          break;
+        case 'gitlab':
+          // Try actual GitLab API call to check connection
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/user.get/execute`;
+          data = {};
+          break;
+        case 'jira':
+          // Try actual Jira API call to check connection
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/myself.get/execute`;
+          data = {};
           break;
         default:
+          // Unknown service - return disconnected
+          console.log(`[IntegrationService] Unknown integration: ${integrationId}`);
           return { ok: true, connected: false };
       }
 
@@ -257,6 +289,21 @@ export class IntegrationService {
 
       console.log(`[IntegrationService] ${integrationId} status check - HTTP ${response.status}`);
       
+      // Check HTTP status codes first
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        console.log(`[IntegrationService] ${integrationId} not connected - HTTP ${response.status}`);
+        const result = { ok: true, connected: false };
+        
+        // Cache the failed result
+        this.statusCache.set(cacheKey, {
+          status: result,
+          timestamp: now,
+          ttl: this.CACHE_TTL / 4 // 15 seconds for failed attempts
+        });
+        
+        return result;
+      }
+      
       // Check if response indicates authentication/permission issues  
       const responseBody = response.data?.body || response.data?.output?.body || response.data;
       if (responseBody?.error) {
@@ -265,10 +312,13 @@ export class IntegrationService {
         
         console.log(`[IntegrationService] ${integrationId} API error - Code: ${errorCode}, Status: ${errorStatus}`);
         
-        // 401 (unauthorized), 403 (forbidden), delegation denied means not connected
-        if (errorCode === 401 || errorCode === 403 || 
+        // 401 (unauthorized), 403 (forbidden), 404 (not found), delegation denied, missing auth credential means not connected
+        if (errorCode === 401 || errorCode === 403 || errorCode === 404 ||
             errorStatus === 'UNAUTHENTICATED' || errorStatus === 'PERMISSION_DENIED' ||
-            responseBody.error.message?.includes('Delegation denied')) {
+            responseBody.error.message?.includes('Delegation denied') ||
+            responseBody.error.message?.includes('missing required authentication credential') ||
+            responseBody.error.message?.includes('Expected OAuth 2 access token') ||
+            responseBody.error.includes('Action') && responseBody.error.includes('not found')) {
           console.log(`[IntegrationService] ${integrationId} not connected - Auth error`);
           
           const result = { ok: true, connected: false };
@@ -286,7 +336,50 @@ export class IntegrationService {
 
       // If we get a successful response (200) with no auth errors, user is connected
       console.log(`[IntegrationService] ${integrationId} connected successfully`);
-      const result = { ok: true, connected: true, account: userEmail };
+      
+      // Extract actual connected account from API response
+      let connectedAccount = userEmail; // fallback to user email
+      try {
+        const responseBody = response.data?.body || response.data?.output?.body || response.data;
+        console.log(`[IntegrationService] API response for ${integrationId}:`, JSON.stringify(responseBody, null, 2));
+        
+        // Extract account info based on service type
+        switch (integrationId) {
+          case 'googlecalendar':
+            // Google Calendar calendarList.list returns items array, find primary calendar
+            if (responseBody?.items && Array.isArray(responseBody.items)) {
+              const primaryCalendar = responseBody.items.find((item: any) => item.primary === true);
+              if (primaryCalendar && primaryCalendar.id && primaryCalendar.id.includes('@')) {
+                connectedAccount = primaryCalendar.id;
+              } else if (primaryCalendar && primaryCalendar.summary && primaryCalendar.summary.includes('@')) {
+                connectedAccount = primaryCalendar.summary;
+              }
+            }
+            break;
+            
+          case 'googledrive':
+            // Google Drive returns user info in various places
+            if (responseBody?.user?.emailAddress) {
+              connectedAccount = responseBody.user.emailAddress;
+            } else if (responseBody?.emailAddress) {
+              connectedAccount = responseBody.emailAddress;
+            }
+            break;
+            
+          case 'gmail':
+            // Gmail getProfile API returns emailAddress directly
+            if (responseBody?.emailAddress) {
+              connectedAccount = responseBody.emailAddress;
+            }
+            break;
+            
+        }
+      } catch (error) {
+        console.warn(`[IntegrationService] Failed to extract account info for ${integrationId}:`, error);
+      }
+      
+      console.log(`[IntegrationService] Account extracted for ${integrationId}: ${connectedAccount} (fallback: ${userEmail})`);
+      const result = { ok: true, connected: true, account: connectedAccount };
       
       // Cache the successful result
       this.statusCache.set(cacheKey, {
@@ -322,9 +415,24 @@ export class IntegrationService {
     try {
       console.log(`[IntegrationService] Disconnecting ${integrationId} for ${userEmail}`);
       
-      // Clear cache for this user's integration status
+      // Get current connection status to find actual connected account
+      const currentStatus = await this.getStatus(integrationId, userEmail);
+      const actualConnectedAccount = currentStatus.account || userEmail;
+      
+      console.log(`[IntegrationService] Using actual connected account for revoke: ${actualConnectedAccount}`);
+      
+      // Clear cache for this user's integration status - multiple approaches to ensure complete clearing
       const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
+      const actualAccountCacheKey = `${integrationId}:${actualConnectedAccount.toLowerCase().trim()}`;
+      
+      // Delete both user email and actual connected account cache keys
       this.statusCache.delete(cacheKey);
+      if (actualAccountCacheKey !== cacheKey) {
+        this.statusCache.delete(actualAccountCacheKey);
+        console.log(`[IntegrationService] Also cleared cache for actual account: ${actualAccountCacheKey}`);
+      }
+      
+      console.log(`[IntegrationService] Cleared cache keys for disconnect: ${cacheKey}`);
       
       // Try to revoke access via Interactor API
       if (INTERACTOR_API_KEY) {
@@ -345,7 +453,7 @@ export class IntegrationService {
           if (revokeUrl) {
             const response = await retryWithBackoff(async () => {
               return await axios.post(revokeUrl, {}, {
-                params: { account: userEmail.toLowerCase().trim() },
+                params: { account: actualConnectedAccount.toLowerCase().trim() },
                 headers: {
                   'x-api-key': String(INTERACTOR_API_KEY),
                   'Content-Type': 'application/json',
@@ -364,12 +472,9 @@ export class IntegrationService {
         }
       }
       
-      // Cache a disconnected status to force UI update
-      this.statusCache.set(cacheKey, {
-        status: { ok: true, connected: false },
-        timestamp: Date.now(),
-        ttl: this.CACHE_TTL
-      });
+      // Don't cache disconnected status for too long to allow re-authentication
+      // Just clear the cache completely instead of caching disconnected state
+      console.log(`[IntegrationService] Not caching disconnected state to allow immediate re-authentication`);
       
       return { 
         ok: true, 
@@ -396,5 +501,67 @@ export class IntegrationService {
       })
     );
     return statuses;
+  }
+
+  // Clear all cached statuses for testing
+  static clearAllCache(): void {
+    console.log('[IntegrationService] Clearing all cache entries');
+    this.statusCache.clear();
+  }
+
+  // Force disconnect all services for a user
+  static async forceDisconnectAll(userEmail: string): Promise<void> {
+    console.log(`[IntegrationService] Force disconnecting all services for ${userEmail}`);
+    const integrations = this.getAvailableIntegrations();
+    
+    for (const integration of integrations) {
+      const cacheKey = `${integration.id}:${userEmail.toLowerCase().trim()}`;
+      
+      // Cache as disconnected with very long TTL to prevent auto-reconnection  
+      this.statusCache.set(cacheKey, {
+        status: { ok: true, connected: false },
+        timestamp: Date.now(),
+        ttl: this.CACHE_TTL * 60 // 60 minutes to ensure disconnect persists
+      });
+      
+      console.log(`[IntegrationService] Force cached ${integration.id} as disconnected with key: ${cacheKey}`);
+    }
+  }
+
+  // Clear cache for specific user account across all integrations (for account switching)
+  static clearUserCache(userEmail: string): void {
+    console.log(`[IntegrationService] Clearing cache for user: ${userEmail}`);
+    const integrations = this.getAvailableIntegrations();
+    
+    for (const integration of integrations) {
+      const cacheKey = `${integration.id}:${userEmail.toLowerCase().trim()}`;
+      if (this.statusCache.has(cacheKey)) {
+        this.statusCache.delete(cacheKey);
+        console.log(`[IntegrationService] Cleared cache for ${integration.id}:${userEmail}`);
+      }
+    }
+  }
+
+  // Clear cache for specific integration and user (for account switching within a service)
+  static clearIntegrationUserCache(integrationId: string, userEmail: string): void {
+    const cacheKey = `${integrationId}:${userEmail.toLowerCase().trim()}`;
+    if (this.statusCache.has(cacheKey)) {
+      this.statusCache.delete(cacheKey);
+      console.log(`[IntegrationService] Cleared cache for ${integrationId}:${userEmail}`);
+    }
+  }
+
+  // Debug method to inspect cache
+  static getCacheState(userEmail: string): any {
+    const integrations = this.getAvailableIntegrations();
+    const cacheState: any = {};
+    
+    for (const integration of integrations) {
+      const cacheKey = `${integration.id}:${userEmail.toLowerCase().trim()}`;
+      const cached = this.statusCache.get(cacheKey);
+      cacheState[integration.id] = cached || null;
+    }
+    
+    return cacheState;
   }
 }
