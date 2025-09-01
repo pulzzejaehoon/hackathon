@@ -360,23 +360,45 @@ export class InteractorCore {
     const body = params.body || '';
     const from = params.from || userEmail; // Default to authenticated user's email
 
-    // Build RFC822 message EXACTLY like curl example (using \n not \r\n)
+    // Check if body contains HTML content
+    const isHtml = /<[^>]*>/g.test(body);
+    
+    // Encode subject line for UTF-8/Korean characters using RFC2047
+    const encodedSubject = this.encodeRFC2047(subject);
+    
+    // Build RFC822 message with proper MIME headers for HTML support
     let message = '';
     message += `From: ${from}\n`;
     message += `To: ${to}\n`;
-    message += `Subject: ${subject}\n`;
-    message += `\n`; // Empty line separates headers from body  
-    message += body;
+    message += `Subject: ${encodedSubject}\n`;
+    
+    if (isHtml) {
+      // Add MIME headers for HTML content
+      message += `MIME-Version: 1.0\n`;
+      message += `Content-Type: text/html; charset=utf-8\n`;
+      message += `Content-Transfer-Encoding: base64\n`;
+      message += `\n`; // Empty line separates headers from body
+      
+      // Base64 encode HTML body for proper transfer
+      const htmlBase64 = Buffer.from(body).toString('base64');
+      message += htmlBase64;
+    } else {
+      // Plain text email
+      message += `Content-Type: text/plain; charset=utf-8\n`;
+      message += `\n`; // Empty line separates headers from body  
+      message += body;
+    }
 
     console.log(`[InteractorCore] Built RFC822 message for Gmail:`, {
       from,
       to, 
       subject,
+      isHtml,
       messageLength: message.length,
-      rawMessage: message
+      rawMessage: message.substring(0, 500) + (message.length > 500 ? '...' : '')
     });
 
-    // Base64 encode the RFC822 message (standard base64, not URL-safe)
+    // Base64 encode the entire RFC822 message (standard base64, not URL-safe)
     const base64Message = Buffer.from(message).toString('base64');
 
     console.log(`[InteractorCore] Base64 encoded message:`, {
@@ -385,6 +407,23 @@ export class InteractorCore {
     });
 
     return base64Message;
+  }
+
+  /**
+   * Encode string for RFC2047 (MIME header encoding) for UTF-8/Korean characters
+   */
+  private static encodeRFC2047(text: string): string {
+    // Check if text contains non-ASCII characters (including Korean)
+    if (!/[\u0080-\uFFFF]/.test(text)) {
+      // ASCII only, no encoding needed
+      return text;
+    }
+    
+    // Encode as UTF-8 base64 according to RFC2047
+    // Format: =?charset?encoding?encoded-text?=
+    const utf8Buffer = Buffer.from(text, 'utf8');
+    const base64Text = utf8Buffer.toString('base64');
+    return `=?utf-8?B?${base64Text}?=`;
   }
 
   /**
