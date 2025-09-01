@@ -340,6 +340,14 @@ export class InteractorCore {
           userId: 'me'
         };
 
+      case 'get_attachment':
+        // For attachment retrieval: userId, messageId, id (attachmentId)
+        return {
+          userId: params.userId || 'me',
+          messageId: params.messageId,
+          id: params.attachmentId || params.id
+        };
+
       default:
         // For other Gmail actions, use 'me' for consistency
         return {
@@ -528,7 +536,8 @@ export class InteractorCore {
         'send_email': 'gmail.users.messages.send',
         'create_draft': 'gmail.users.drafts.create',
         'list_labels': 'gmail.users.labels.list',
-        'search_messages': 'gmail.users.messages.list'
+        'search_messages': 'gmail.users.messages.list',
+        'get_attachment': 'gmail.users.messages.attachments.get'
       },
       'googledrive': {
         'list_files': 'drive.files.list',

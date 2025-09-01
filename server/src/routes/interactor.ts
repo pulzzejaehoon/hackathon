@@ -239,4 +239,68 @@ router.post('/validate-command', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/interactor/gmail-attachment/:messageId/:attachmentId
+ * Proxy Gmail attachments for secure image loading
+ */
+router.get('/gmail-attachment/:messageId/:attachmentId', authMiddleware, async (req, res) => {
+  try {
+    const { messageId, attachmentId } = req.params;
+    const user = (req as any).user;
+
+    if (!messageId || !attachmentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing messageId or attachmentId'
+      });
+    }
+
+    // Use InteractorCore to get attachment data
+    const command: StructuredCommand = {
+      service: 'gmail',
+      action: 'get_attachment',
+      params: {
+        messageId,
+        attachmentId
+      },
+      userId: user.email
+    };
+
+    const result = await InteractorCore.processCommand(command);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    // Extract base64 data from response
+    const attachmentData = result.data?.output?.body?.data || result.data?.data;
+    
+    if (!attachmentData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Attachment data not found'
+      });
+    }
+
+    // Convert base64url to buffer
+    const buffer = Buffer.from(attachmentData, 'base64url');
+    
+    // Set appropriate headers for binary content
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': buffer.length,
+      'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+    });
+    
+    res.send(buffer);
+
+  } catch (error: any) {
+    console.error('[InteractorAPI] Gmail attachment proxy error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve attachment'
+    });
+  }
+});
+
 export default router;
