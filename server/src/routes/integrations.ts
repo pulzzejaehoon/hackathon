@@ -22,11 +22,17 @@ router.get('/:id/auth-url', authMiddleware, async (req: Request, res: Response) 
     const { id } = req.params;
     const account = (req as any).user?.email;
     
+    console.log(`[Auth URL] Request for ${id} with account:`, account);
+    
     if (!account) {
       return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
     }
 
-    const result = await IntegrationService.getAuthUrl(id, account);
+    // For Teams, use specific account that has proper permissions
+    const finalAccount = id === 'teams' ? 'interactor@interactorservice.onmicrosoft.com' : account;
+    console.log(`[Auth URL] Using final account for ${id}:`, finalAccount);
+
+    const result = await IntegrationService.getAuthUrl(id, finalAccount);
     
     if (!result.ok) {
       return res.status(400).json(result);
@@ -191,6 +197,14 @@ router.get('/:id/oauth-callback', async (req: Request, res: Response) => {
         // This is safe because cache will repopulate with fresh status checks
         IntegrationService.clearAllCache();
         console.log(`[Integration OAuth] Cleared all cache for ${id} OAuth success`);
+        
+        // For Teams specifically, also clear disconnect flags that might have longer TTL
+        if (id === 'teams') {
+          console.log(`[Integration OAuth] Clearing Teams-specific disconnect flags`);
+          // We don't have user context, but we can clear common Teams disconnect keys
+          IntegrationService.clearIntegrationUserCache('teams', 'interactor@interactorservice.onmicrosoft.com');
+          // Note: We can't clear user-specific keys without knowing the user email
+        }
       }
     } catch (error) {
       console.warn(`[Integration OAuth] Failed to clear cache for ${id}:`, error);
@@ -898,6 +912,285 @@ router.get('/testing/cache-state/:email', async (req: Request, res: Response) =>
     res.json({ email, cacheState });
   } catch (error: any) {
     res.status(500).json({ ok: false, error: 'Failed to get cache state' });
+  }
+});
+
+/**
+ * GET /api/integrations/teams/chats
+ * Get Microsoft Teams chats list
+ */
+router.get('/teams/chats', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = (req as any).user?.email;
+    
+    if (!account) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+
+    if (!process.env.INTERACTOR_API_KEY) {
+      return res.status(500).json({ ok: false, error: 'Interactor API key not configured' });
+    }
+
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/msteams/action/chat.list/execute';
+    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.INTERACTOR_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return res.json({
+      ok: true,
+      chats: data.output?.body?.value || [],
+      data
+    });
+
+  } catch (error: any) {
+    console.error('[Teams] Failed to get chats:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to get chats' });
+  }
+});
+
+/**
+ * POST /api/integrations/teams/clear-disconnect
+ * Manually clear Teams disconnect flags for debugging
+ */
+router.post('/teams/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[Teams Clear Disconnect] Manually clearing disconnect flags');
+    
+    // Clear Teams disconnect flags for both accounts
+    const teamsAccount = 'interactor@interactorservice.onmicrosoft.com';
+    const userEmail = (req.user as any)?.email || 'jaehoon@interactor.com';
+    
+    IntegrationService.clearIntegrationUserCache('teams', teamsAccount);
+    IntegrationService.clearIntegrationUserCache('teams', userEmail);
+    
+    // Also clear all cache to be safe
+    IntegrationService.clearAllCache();
+    
+    console.log('[Teams Clear Disconnect] Cleared disconnect flags for both accounts');
+    
+    return res.json({ ok: true, message: 'Teams disconnect flags cleared' });
+  } catch (error: any) {
+    console.error('[Teams Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * POST /api/integrations/gmail/clear-disconnect
+ * Manually clear Gmail disconnect flags for debugging
+ */
+router.post('/gmail/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[Gmail Clear Disconnect] Manually clearing disconnect flags');
+    
+    const userEmail = (req.user as any)?.email;
+    if (!userEmail) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+    
+    IntegrationService.clearIntegrationUserCache('gmail', userEmail);
+    
+    // Also clear all cache to be safe
+    IntegrationService.clearAllCache();
+    
+    console.log('[Gmail Clear Disconnect] Cleared disconnect flags');
+    
+    return res.json({ ok: true, message: 'Gmail disconnect flags cleared' });
+  } catch (error: any) {
+    console.error('[Gmail Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * POST /api/integrations/googlecalendar/clear-disconnect
+ * Manually clear Google Calendar disconnect flags for debugging
+ */
+router.post('/googlecalendar/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[Calendar Clear Disconnect] Manually clearing disconnect flags');
+    
+    const userEmail = (req.user as any)?.email;
+    if (!userEmail) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+    
+    IntegrationService.clearIntegrationUserCache('googlecalendar', userEmail);
+    
+    // Also clear all cache to be safe
+    IntegrationService.clearAllCache();
+    
+    console.log('[Calendar Clear Disconnect] Cleared disconnect flags');
+    
+    return res.json({ ok: true, message: 'Google Calendar disconnect flags cleared' });
+  } catch (error: any) {
+    console.error('[Calendar Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * GET /api/integrations/teams/channels
+ * Get Microsoft Teams channels list for a team
+ */
+router.get('/teams/channels', authMiddleware, async (req: Request, res: Response) => {
+  console.log('[Teams Channels API] Request received');
+  console.log('[Teams Channels API] Headers:', req.headers);
+  console.log('[Teams Channels API] User:', req.user);
+  try {
+    const account = 'interactor@interactorservice.onmicrosoft.com'; // Use Teams-specific account
+    
+    // Hardcoded team info since team.list API is not available
+    const team = {
+      description: "Test-team",
+      id: "11461220-3d6a-450c-912f-49fbe09be2f5",
+      name: "Test-team"
+    };
+
+    if (!team) {
+      return res.status(400).json({ ok: false, error: 'Team is required' });
+    }
+
+    if (!process.env.INTERACTOR_API_KEY) {
+      return res.status(500).json({ ok: false, error: 'Interactor API key not configured' });
+    }
+
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/msteamsplus/action/channel.list/execute';
+    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.INTERACTOR_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        team: team
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Extract channels from the response and transform to expected format
+    const rawChannels = data.output || [];
+    const channels = rawChannels.map((channel: any) => ({
+      id: channel.id,
+      displayName: channel.label || channel.displayName || channel.name || 'Unknown Channel',
+      description: channel.description || 'Teams Channel'
+    }));
+    
+    return res.json({
+      ok: true,
+      channels: channels,
+      data
+    });
+
+  } catch (error: any) {
+    console.error('[Teams] Failed to get channels:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to get channels' });
+  }
+});
+
+/**
+ * POST /api/integrations/teams/send-message
+ * Send message to Microsoft Teams chat or channel
+ */
+router.post('/teams/send-message', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = 'interactor@interactorservice.onmicrosoft.com'; // Use Teams-specific account
+    const { channel, team, content } = req.body;
+    
+    console.log('[Teams] Send message request:', { channel, team, content });
+
+    if (!content) {
+      return res.status(400).json({ ok: false, error: 'Content is required' });
+    }
+
+    if (!channel || !team) {
+      return res.status(400).json({ ok: false, error: 'Channel and team are required' });
+    }
+
+    if (!process.env.INTERACTOR_API_KEY) {
+      return res.status(500).json({ ok: false, error: 'Interactor API key not configured' });
+    }
+
+    // Send to channel only (simplified)
+    const url = 'https://console.interactor.com/api/v1/connector/interactor/msteamsplus/action/channel.message.send/execute';
+    const requestBody = {
+      channel: channel,
+      team: team,
+      content: content
+    };
+
+    const response = await fetch(url + `?account=${encodeURIComponent(account)}`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.INTERACTOR_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    return res.json({
+      ok: true,
+      message: `Teams message sent successfully to channel`,
+      data
+    });
+
+  } catch (error: any) {
+    console.error('[Teams] Failed to send message:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to send message' });
+  }
+});
+
+/**
+ * POST /api/integrations/teams/disconnect
+ * Disconnect Teams integration
+ */
+router.post('/teams/disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const account = 'interactor@interactorservice.onmicrosoft.com'; // Teams-specific account
+    
+    // Clear Teams status cache for the user
+    IntegrationService.clearIntegrationUserCache('teams', account);
+    
+    // Set manual disconnect flag
+    const disconnectKey = `teams_disconnected:${account}`;
+    (IntegrationService as any).statusCache.set(disconnectKey, {
+      status: { disconnected: true },
+      timestamp: Date.now(),
+      ttl: 30 * 60 * 1000 // 30 minutes
+    });
+    
+    console.log(`[Teams] Manually disconnected Teams for ${account}`);
+    
+    return res.json({
+      ok: true,
+      message: 'Teams disconnected successfully'
+    });
+    
+  } catch (error: any) {
+    console.error('[Teams] Failed to disconnect:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to disconnect Teams' });
   }
 });
 

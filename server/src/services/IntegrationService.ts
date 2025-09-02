@@ -80,7 +80,7 @@ export class IntegrationService {
       id: 'teams',
       name: 'Microsoft Teams',
       description: 'Collaborate with Microsoft Teams',
-      interactorConnectorName: 'teams-v1',
+      interactorConnectorName: 'msteamsplus',
       category: 'communication',
       icon: '/microsoft-teams_logo.svg'
     }],
@@ -224,11 +224,27 @@ export class IntegrationService {
       // Use appropriate API call for each service
       switch (integrationId) {
         case 'googlecalendar':
+          // Check if manually disconnected first
+          const calendarDisconnectedKey = `googlecalendar_disconnected:${userEmail.toLowerCase().trim()}`;
+          const calendarDisconnected = this.statusCache.get(calendarDisconnectedKey);
+          if (calendarDisconnected && (now - calendarDisconnected.timestamp) < calendarDisconnected.ttl) {
+            console.log(`[IntegrationService] Google Calendar manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           // Use calendar.calendarList.list to get all calendars including primary
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/calendar.calendarList.list/execute`;
           data = { minAccessRole: "reader" };
           break;
         case 'gmail':
+          // Check if manually disconnected first
+          const gmailDisconnectedKey = `gmail_disconnected:${userEmail.toLowerCase().trim()}`;
+          const gmailDisconnected = this.statusCache.get(gmailDisconnectedKey);
+          if (gmailDisconnected && (now - gmailDisconnected.timestamp) < gmailDisconnected.ttl) {
+            console.log(`[IntegrationService] Gmail manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.getProfile/execute`;
           data = { userId: "me" };
           break;
@@ -270,9 +286,56 @@ export class IntegrationService {
           data = {};
           break;
         case 'teams':
-          // Try actual Microsoft Teams API call to check connection
-          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/me/execute`;
-          data = {};
+          // Check if Teams was manually disconnected - check both possible accounts
+          const teamsAccount = 'interactor@interactorservice.onmicrosoft.com';
+          const teamsDisconnectKey1 = `teams_disconnected:${teamsAccount}`;
+          const teamsDisconnectKey2 = `teams_disconnected:${userEmail}`;
+          
+          const teamsDisconnected1 = this.statusCache.get(teamsDisconnectKey1);
+          const teamsDisconnected2 = this.statusCache.get(teamsDisconnectKey2);
+          
+          if ((teamsDisconnected1?.status as any)?.disconnected || (teamsDisconnected2?.status as any)?.disconnected) {
+            console.log(`[IntegrationService] Teams manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
+          // Try actual Teams API call to check connection with real account
+          console.log(`[IntegrationService] Teams status check - testing with channel.list API`);
+          url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/channel.list/execute`;
+          data = {
+            "team": {
+              "description": "Test-team",
+              "id": "11461220-3d6a-450c-912f-49fbe09be2f5", 
+              "name": "Test-team"
+            }
+          };
+          console.log(`[IntegrationService] Teams using account: ${teamsAccount}`);
+          
+          try {
+            const teamsResponse = await retryWithBackoff(async () => {
+              return await axios.post(url, data, {
+                params: { account: teamsAccount },
+                headers: {
+                  'x-api-key': INTERACTOR_API_KEY,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 30000
+              });
+            });
+
+            console.log(`[IntegrationService] Teams API response:`, teamsResponse.data);
+            return {
+              ok: true,
+              connected: true,
+              account: teamsAccount
+            };
+          } catch (error: any) {
+            console.log(`[IntegrationService] Teams API error:`, error.response?.status || error.message);
+            return {
+              ok: true,
+              connected: false
+            };
+          }
           break;
         case 'github':
           // Try actual GitHub API call to check connection
@@ -462,7 +525,31 @@ export class IntegrationService {
           let revokeUrl = '';
           switch (integrationId) {
             case 'googlecalendar':
+              // Gmail/Calendar revoke API returns 404, so set disconnect flag
+              const calendarDisconnectedKey = `googlecalendar_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(calendarDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set Google Calendar disconnect flag: ${calendarDisconnectedKey}`);
+              
+              // Also try the revoke API in case it works in the future
+              revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
+              break;
             case 'gmail':
+              // Gmail/Calendar revoke API returns 404, so set disconnect flag
+              const gmailDisconnectedKey = `gmail_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(gmailDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set Gmail disconnect flag: ${gmailDisconnectedKey}`);
+              
+              // Also try the revoke API in case it works in the future
+              revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
+              break;
             case 'googledrive':
               revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
               break;
@@ -485,6 +572,25 @@ export class IntegrationService {
                 ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
               });
               console.log(`[IntegrationService] Set Zoom disconnect flag: ${zoomDisconnectedKey}`);
+              break;
+            case 'teams':
+              // For Teams, set special disconnect flag for both possible accounts since it doesn't have proper revoke
+              const teamsAccount = 'interactor@interactorservice.onmicrosoft.com';
+              const teamsDisconnectedKey1 = `teams_disconnected:${teamsAccount}`;
+              const teamsDisconnectedKey2 = `teams_disconnected:${userEmail.toLowerCase().trim()}`;
+              
+              // Set disconnect flag for both accounts - note we use 'disconnected' property that status check looks for
+              this.statusCache.set(teamsDisconnectedKey1, {
+                status: { ok: true, connected: false, disconnected: true } as any,
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              this.statusCache.set(teamsDisconnectedKey2, {
+                status: { ok: true, connected: false, disconnected: true } as any,
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60
+              });
+              console.log(`[IntegrationService] Set Teams disconnect flags: ${teamsDisconnectedKey1}, ${teamsDisconnectedKey2}`);
               break;
             default:
               // For services without specific revoke endpoint, just clear cache
