@@ -44,8 +44,8 @@ export class IntegrationService {
   private static readonly CACHE_TTL = 60 * 1000; // 1 minute cache
   
   private static integrations: Map<string, IntegrationConfig> = new Map([
-    ['googlecalendar', {
-      id: 'googlecalendar',
+    ['google-calendar', {
+      id: 'google-calendar',
       name: 'Google Calendar',
       description: 'Sync and manage your Google Calendar events',
       interactorConnectorName: 'googlecalendar-v1',
@@ -60,8 +60,8 @@ export class IntegrationService {
       category: 'communication',
       icon: '/logo002.svg'
     }],
-    ['googledrive', {
-      id: 'googledrive',
+    ['google-drive', {
+      id: 'google-drive',
       name: 'Google Drive',
       description: 'Access and manage your Google Drive files',
       interactorConnectorName: 'googledrive-v1',
@@ -223,9 +223,9 @@ export class IntegrationService {
 
       // Use appropriate API call for each service
       switch (integrationId) {
-        case 'googlecalendar':
+        case 'google-calendar':
           // Check if manually disconnected first
-          const calendarDisconnectedKey = `googlecalendar_disconnected:${userEmail.toLowerCase().trim()}`;
+          const calendarDisconnectedKey = `google-calendar_disconnected:${userEmail.toLowerCase().trim()}`;
           const calendarDisconnected = this.statusCache.get(calendarDisconnectedKey);
           if (calendarDisconnected && (now - calendarDisconnected.timestamp) < calendarDisconnected.ttl) {
             console.log(`[IntegrationService] Google Calendar manually disconnected - returning false`);
@@ -248,9 +248,9 @@ export class IntegrationService {
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/gmail.users.getProfile/execute`;
           data = { userId: "me" };
           break;
-        case 'googledrive':
+        case 'google-drive':
           // Check if manually disconnected first
-          const driveDisconnectedKey = `googledrive_disconnected:${userEmail.toLowerCase().trim()}`;
+          const driveDisconnectedKey = `google-drive_disconnected:${userEmail.toLowerCase().trim()}`;
           const driveDisconnected = this.statusCache.get(driveDisconnectedKey);
           if (driveDisconnected && (now - driveDisconnected.timestamp) < driveDisconnected.ttl) {
             console.log(`[IntegrationService] Google Drive manually disconnected - returning false`);
@@ -450,20 +450,20 @@ export class IntegrationService {
         }
       }
 
-      // If we get a successful response (200) with no auth errors, user is connected
-      console.log(`[IntegrationService] ${integrationId} connected successfully`);
-      
-      // Extract actual connected account from API response
+      // Extract actual connected account and validate the response has real data
       let connectedAccount = userEmail; // fallback to user email
+      let hasValidData = false;
+      
       try {
-        const responseBody = response.data?.body || response.data?.output?.body || response.data;
+        const responseBody = response.data?.body || response.data?.output || response.data;
         console.log(`[IntegrationService] API response for ${integrationId}:`, JSON.stringify(responseBody, null, 2));
         
-        // Extract account info based on service type
+        // Validate response has actual data based on service type
         switch (integrationId) {
-          case 'googlecalendar':
+          case 'google-calendar':
             // Google Calendar calendarList.list returns items array, find primary calendar
-            if (responseBody?.items && Array.isArray(responseBody.items)) {
+            if (responseBody?.items && Array.isArray(responseBody.items) && responseBody.items.length > 0) {
+              hasValidData = true;
               const primaryCalendar = responseBody.items.find((item: any) => item.primary === true);
               if (primaryCalendar && primaryCalendar.id && primaryCalendar.id.includes('@')) {
                 connectedAccount = primaryCalendar.id;
@@ -473,11 +473,13 @@ export class IntegrationService {
             }
             break;
             
-          case 'googledrive':
+          case 'google-drive':
             // Google Drive returns user info in various places
             if (responseBody?.user?.emailAddress) {
+              hasValidData = true;
               connectedAccount = responseBody.user.emailAddress;
             } else if (responseBody?.emailAddress) {
+              hasValidData = true;
               connectedAccount = responseBody.emailAddress;
             }
             break;
@@ -485,15 +487,40 @@ export class IntegrationService {
           case 'gmail':
             // Gmail getProfile API returns emailAddress directly
             if (responseBody?.emailAddress) {
+              hasValidData = true;
               connectedAccount = responseBody.emailAddress;
             }
             break;
             
         }
+        
+        // For other services, assume they have valid data if no specific checks
+        if (!hasValidData) {
+          if (['slack', 'teams', 'zoom', 'github', 'gitlab', 'jira'].includes(integrationId)) {
+            hasValidData = true; // Assume valid if HTTP 200 with no auth errors
+          }
+        }
+        
       } catch (error) {
         console.warn(`[IntegrationService] Failed to extract account info for ${integrationId}:`, error);
       }
       
+      // Only consider connected if we have valid data
+      if (!hasValidData) {
+        console.log(`[IntegrationService] ${integrationId} HTTP 200 but no valid data - not connected`);
+        const result = { ok: true, connected: false };
+        
+        // Cache the failed result for a shorter time
+        this.statusCache.set(cacheKey, {
+          status: result,
+          timestamp: now,
+          ttl: this.CACHE_TTL / 4 // 15 seconds for failed attempts
+        });
+        
+        return result;
+      }
+      
+      console.log(`[IntegrationService] ${integrationId} connected successfully with valid data`);
       console.log(`[IntegrationService] Account extracted for ${integrationId}: ${connectedAccount} (fallback: ${userEmail})`);
       const result = { ok: true, connected: true, account: connectedAccount };
       
@@ -556,9 +583,9 @@ export class IntegrationService {
           // Different revoke endpoints per service
           let revokeUrl = '';
           switch (integrationId) {
-            case 'googlecalendar':
+            case 'google-calendar':
               // Gmail/Calendar revoke API returns 404, so set disconnect flag
-              const calendarDisconnectedKey = `googlecalendar_disconnected:${userEmail.toLowerCase().trim()}`;
+              const calendarDisconnectedKey = `google-calendar_disconnected:${userEmail.toLowerCase().trim()}`;
               this.statusCache.set(calendarDisconnectedKey, {
                 status: { ok: true, connected: false },
                 timestamp: Date.now(),
@@ -582,9 +609,9 @@ export class IntegrationService {
               // Also try the revoke API in case it works in the future
               revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
               break;
-            case 'googledrive':
+            case 'google-drive':
               // Google Drive might have revoke issues, so set disconnect flag as backup
-              const driveDisconnectedKey = `googledrive_disconnected:${userEmail.toLowerCase().trim()}`;
+              const driveDisconnectedKey = `google-drive_disconnected:${userEmail.toLowerCase().trim()}`;
               this.statusCache.set(driveDisconnectedKey, {
                 status: { ok: true, connected: false },
                 timestamp: Date.now(),

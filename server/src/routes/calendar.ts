@@ -14,7 +14,7 @@ router.get('/list', async (req: Request, res: Response) => {
     if (!account) return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
 
     // Check if user is connected to Google Calendar
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -60,7 +60,7 @@ router.post('/quick-add', async (req: Request, res: Response) => {
     }
 
     // Check if user is connected to Google Calendar
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -103,7 +103,7 @@ router.get('/events/list', async (req: Request, res: Response) => {
     const account = (req as any).user?.email;
     if (!account) return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -174,7 +174,7 @@ router.post('/events/create', async (req: Request, res: Response) => {
       });
     }
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -221,7 +221,7 @@ router.get('/events/:eventId', async (req: Request, res: Response) => {
 
     if (!account) return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -270,7 +270,7 @@ router.put('/events/:eventId', async (req: Request, res: Response) => {
 
     if (!account) return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -318,7 +318,7 @@ router.delete('/events/:eventId', async (req: Request, res: Response) => {
 
     if (!account) return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -364,7 +364,7 @@ router.post('/calendars/create', async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: 'Calendar summary is required' });
     }
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
@@ -413,7 +413,7 @@ router.get('/freebusy', async (req: Request, res: Response) => {
       });
     }
 
-    const status = await IntegrationService.getStatus('googlecalendar', account);
+    const status = await IntegrationService.getStatus('google-calendar', account);
     if (!status.connected) {
       return res.status(400).json({ 
         ok: false, 
