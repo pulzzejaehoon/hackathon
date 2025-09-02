@@ -249,6 +249,14 @@ export class IntegrationService {
           data = { userId: "me" };
           break;
         case 'googledrive':
+          // Check if manually disconnected first
+          const driveDisconnectedKey = `googledrive_disconnected:${userEmail.toLowerCase().trim()}`;
+          const driveDisconnected = this.statusCache.get(driveDisconnectedKey);
+          if (driveDisconnected && (now - driveDisconnected.timestamp) < driveDisconnected.ttl) {
+            console.log(`[IntegrationService] Google Drive manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/drive.about.get/execute`;
           data = {
             fields: "user,storageQuota"
@@ -338,16 +346,40 @@ export class IntegrationService {
           }
           break;
         case 'github':
+          // Check if manually disconnected first
+          const githubDisconnectedKey = `github_disconnected:${userEmail.toLowerCase().trim()}`;
+          const githubDisconnected = this.statusCache.get(githubDisconnectedKey);
+          if (githubDisconnected && (now - githubDisconnected.timestamp) < githubDisconnected.ttl) {
+            console.log(`[IntegrationService] GitHub manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           // Try actual GitHub API call to check connection
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/user.get/execute`;
           data = {};
           break;
         case 'gitlab':
+          // Check if manually disconnected first
+          const gitlabDisconnectedKey = `gitlab_disconnected:${userEmail.toLowerCase().trim()}`;
+          const gitlabDisconnected = this.statusCache.get(gitlabDisconnectedKey);
+          if (gitlabDisconnected && (now - gitlabDisconnected.timestamp) < gitlabDisconnected.ttl) {
+            console.log(`[IntegrationService] GitLab manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           // Try actual GitLab API call to check connection
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/user.get/execute`;
           data = {};
           break;
         case 'jira':
+          // Check if manually disconnected first
+          const jiraDisconnectedKey = `jira_disconnected:${userEmail.toLowerCase().trim()}`;
+          const jiraDisconnected = this.statusCache.get(jiraDisconnectedKey);
+          if (jiraDisconnected && (now - jiraDisconnected.timestamp) < jiraDisconnected.ttl) {
+            console.log(`[IntegrationService] Jira manually disconnected - returning false`);
+            return { ok: true, connected: false };
+          }
+          
           // Try actual Jira API call to check connection
           url = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/action/myself.get/execute`;
           data = {};
@@ -551,6 +583,16 @@ export class IntegrationService {
               revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
               break;
             case 'googledrive':
+              // Google Drive might have revoke issues, so set disconnect flag as backup
+              const driveDisconnectedKey = `googledrive_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(driveDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set Google Drive disconnect flag: ${driveDisconnectedKey}`);
+              
+              // Also try the revoke API
               revokeUrl = `${INTERACTOR_BASE_URL}/connector/interactor/${integration.interactorConnectorName}/revoke`;
               break;
             case 'slack':
@@ -591,6 +633,36 @@ export class IntegrationService {
                 ttl: this.CACHE_TTL * 60
               });
               console.log(`[IntegrationService] Set Teams disconnect flags: ${teamsDisconnectedKey1}, ${teamsDisconnectedKey2}`);
+              break;
+            case 'github':
+              // For GitHub, set disconnect flag since revoke might not work reliably
+              const githubDisconnectedKey = `github_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(githubDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set GitHub disconnect flag: ${githubDisconnectedKey}`);
+              break;
+            case 'gitlab':
+              // For GitLab, set disconnect flag since revoke might not work reliably
+              const gitlabDisconnectedKey = `gitlab_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(gitlabDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set GitLab disconnect flag: ${gitlabDisconnectedKey}`);
+              break;
+            case 'jira':
+              // For Jira, set disconnect flag since revoke might not work reliably
+              const jiraDisconnectedKey = `jira_disconnected:${userEmail.toLowerCase().trim()}`;
+              this.statusCache.set(jiraDisconnectedKey, {
+                status: { ok: true, connected: false },
+                timestamp: Date.now(),
+                ttl: this.CACHE_TTL * 60 // 1 hour - long enough to show as disconnected
+              });
+              console.log(`[IntegrationService] Set Jira disconnect flag: ${jiraDisconnectedKey}`);
               break;
             default:
               // For services without specific revoke endpoint, just clear cache

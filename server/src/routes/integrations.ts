@@ -198,12 +198,16 @@ router.get('/:id/oauth-callback', async (req: Request, res: Response) => {
         IntegrationService.clearAllCache();
         console.log(`[Integration OAuth] Cleared all cache for ${id} OAuth success`);
         
-        // For Teams specifically, also clear disconnect flags that might have longer TTL
+        // For services with disconnect flags, clear them after OAuth success
         if (id === 'teams') {
           console.log(`[Integration OAuth] Clearing Teams-specific disconnect flags`);
           // We don't have user context, but we can clear common Teams disconnect keys
           IntegrationService.clearIntegrationUserCache('teams', 'interactor@interactorservice.onmicrosoft.com');
           // Note: We can't clear user-specific keys without knowing the user email
+        } else if (id === 'gmail' || id === 'googlecalendar') {
+          console.log(`[Integration OAuth] Clearing ${id} disconnect flags in OAuth callback`);
+          // For Gmail/Calendar, we don't have user context here, but clearAllCache() should handle it
+          // The client-side will also call clear-disconnect endpoint with proper user context
         }
       }
     } catch (error) {
@@ -231,16 +235,37 @@ router.get('/:id/oauth-callback', async (req: Request, res: Response) => {
           <p>This window will close automatically...</p>
         </div>
         <script>
-          // Notify parent window of success
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage({ 
+          // Notify parent window of success with multiple attempts
+          console.log('OAuth callback: Starting success notification for ${id}');
+          
+          function sendMessage() {
+            const message = { 
               type: 'OAUTH_SUCCESS', 
               service: '${id}' 
-            }, '*');
+            };
+            
+            if (window.opener && !window.opener.closed) {
+              console.log('OAuth callback: Sending message to opener', message);
+              window.opener.postMessage(message, '*');
+            }
+            
+            if (window.parent && window.parent !== window) {
+              console.log('OAuth callback: Sending message to parent', message);
+              window.parent.postMessage(message, '*');
+            }
           }
+          
+          // Send message immediately
+          sendMessage();
+          
+          // Send message again after 500ms to ensure delivery
+          setTimeout(sendMessage, 500);
+          
+          // Close window after 3 seconds
           setTimeout(() => {
+            console.log('OAuth callback: Closing window');
             window.close();
-          }, 2000);
+          }, 3000);
         </script>
       </body>
       </html>
@@ -1026,16 +1051,177 @@ router.post('/googlecalendar/clear-disconnect', authMiddleware, async (req: Requ
       return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
     }
     
+    // Clear specific disconnect flag for Google Calendar
+    const calendarDisconnectedKey = `googlecalendar_disconnected:${userEmail.toLowerCase().trim()}`;
+    const statusCache = (IntegrationService as any).statusCache;
+    
+    if (statusCache.has(calendarDisconnectedKey)) {
+      statusCache.delete(calendarDisconnectedKey);
+      console.log(`[Calendar Clear Disconnect] Deleted specific disconnect flag: ${calendarDisconnectedKey}`);
+    } else {
+      console.log(`[Calendar Clear Disconnect] No specific disconnect flag found: ${calendarDisconnectedKey}`);
+    }
+    
+    // Clear general cache for this user/integration
     IntegrationService.clearIntegrationUserCache('googlecalendar', userEmail);
     
-    // Also clear all cache to be safe
+    // Also clear all cache to be absolutely sure
     IntegrationService.clearAllCache();
     
-    console.log('[Calendar Clear Disconnect] Cleared disconnect flags');
+    console.log('[Calendar Clear Disconnect] Cleared all disconnect flags and cache');
     
-    return res.json({ ok: true, message: 'Google Calendar disconnect flags cleared' });
+    return res.json({ 
+      ok: true, 
+      message: 'Google Calendar disconnect flags cleared',
+      clearedKey: calendarDisconnectedKey
+    });
   } catch (error: any) {
     console.error('[Calendar Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * POST /api/integrations/googledrive/clear-disconnect
+ * Manually clear Google Drive disconnect flags for debugging
+ */
+router.post('/googledrive/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[Drive Clear Disconnect] Manually clearing disconnect flags');
+    
+    const userEmail = (req.user as any)?.email;
+    if (!userEmail) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+    
+    // Clear specific disconnect flag for Google Drive
+    const driveDisconnectedKey = `googledrive_disconnected:${userEmail.toLowerCase().trim()}`;
+    const statusCache = (IntegrationService as any).statusCache;
+    
+    if (statusCache.has(driveDisconnectedKey)) {
+      statusCache.delete(driveDisconnectedKey);
+      console.log(`[Drive Clear Disconnect] Deleted specific disconnect flag: ${driveDisconnectedKey}`);
+    } else {
+      console.log(`[Drive Clear Disconnect] No specific disconnect flag found: ${driveDisconnectedKey}`);
+    }
+    
+    IntegrationService.clearIntegrationUserCache('googledrive', userEmail);
+    IntegrationService.clearAllCache();
+    
+    console.log('[Drive Clear Disconnect] Cleared all disconnect flags and cache');
+    
+    return res.json({ 
+      ok: true, 
+      message: 'Google Drive disconnect flags cleared',
+      clearedKey: driveDisconnectedKey
+    });
+  } catch (error: any) {
+    console.error('[Drive Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * POST /api/integrations/github/clear-disconnect
+ * Manually clear GitHub disconnect flags for debugging
+ */
+router.post('/github/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[GitHub Clear Disconnect] Manually clearing disconnect flags');
+    
+    const userEmail = (req.user as any)?.email;
+    if (!userEmail) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+    
+    const githubDisconnectedKey = `github_disconnected:${userEmail.toLowerCase().trim()}`;
+    const statusCache = (IntegrationService as any).statusCache;
+    
+    if (statusCache.has(githubDisconnectedKey)) {
+      statusCache.delete(githubDisconnectedKey);
+      console.log(`[GitHub Clear Disconnect] Deleted specific disconnect flag: ${githubDisconnectedKey}`);
+    }
+    
+    IntegrationService.clearIntegrationUserCache('github', userEmail);
+    IntegrationService.clearAllCache();
+    
+    return res.json({ 
+      ok: true, 
+      message: 'GitHub disconnect flags cleared',
+      clearedKey: githubDisconnectedKey
+    });
+  } catch (error: any) {
+    console.error('[GitHub Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * POST /api/integrations/gitlab/clear-disconnect
+ * Manually clear GitLab disconnect flags for debugging
+ */
+router.post('/gitlab/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[GitLab Clear Disconnect] Manually clearing disconnect flags');
+    
+    const userEmail = (req.user as any)?.email;
+    if (!userEmail) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+    
+    const gitlabDisconnectedKey = `gitlab_disconnected:${userEmail.toLowerCase().trim()}`;
+    const statusCache = (IntegrationService as any).statusCache;
+    
+    if (statusCache.has(gitlabDisconnectedKey)) {
+      statusCache.delete(gitlabDisconnectedKey);
+      console.log(`[GitLab Clear Disconnect] Deleted specific disconnect flag: ${gitlabDisconnectedKey}`);
+    }
+    
+    IntegrationService.clearIntegrationUserCache('gitlab', userEmail);
+    IntegrationService.clearAllCache();
+    
+    return res.json({ 
+      ok: true, 
+      message: 'GitLab disconnect flags cleared',
+      clearedKey: gitlabDisconnectedKey
+    });
+  } catch (error: any) {
+    console.error('[GitLab Clear Disconnect] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
+  }
+});
+
+/**
+ * POST /api/integrations/jira/clear-disconnect
+ * Manually clear Jira disconnect flags for debugging
+ */
+router.post('/jira/clear-disconnect', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[Jira Clear Disconnect] Manually clearing disconnect flags');
+    
+    const userEmail = (req.user as any)?.email;
+    if (!userEmail) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: missing user context' });
+    }
+    
+    const jiraDisconnectedKey = `jira_disconnected:${userEmail.toLowerCase().trim()}`;
+    const statusCache = (IntegrationService as any).statusCache;
+    
+    if (statusCache.has(jiraDisconnectedKey)) {
+      statusCache.delete(jiraDisconnectedKey);
+      console.log(`[Jira Clear Disconnect] Deleted specific disconnect flag: ${jiraDisconnectedKey}`);
+    }
+    
+    IntegrationService.clearIntegrationUserCache('jira', userEmail);
+    IntegrationService.clearAllCache();
+    
+    return res.json({ 
+      ok: true, 
+      message: 'Jira disconnect flags cleared',
+      clearedKey: jiraDisconnectedKey
+    });
+  } catch (error: any) {
+    console.error('[Jira Clear Disconnect] Error:', error);
     return res.status(500).json({ ok: false, error: 'Failed to clear disconnect flags' });
   }
 });
