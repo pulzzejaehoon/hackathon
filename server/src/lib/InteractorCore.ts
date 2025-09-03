@@ -153,14 +153,14 @@ export class InteractorCore {
    */
   private static mapServiceToIntegrationId(service: string): string | null {
     const serviceMap: Record<string, string> = {
-      'google.calendar': 'googlecalendar',
-      'calendar': 'googlecalendar',
-      'googlecalendar': 'googlecalendar',
+      'google.calendar': 'google-calendar',
+      'calendar': 'google-calendar',
+      'googlecalendar': 'google-calendar',
       'gmail': 'gmail',
       'google.gmail': 'gmail',
-      'googledrive': 'googledrive',
-      'drive': 'googledrive',
-      'google.drive': 'googledrive',
+      'googledrive': 'google-drive',
+      'drive': 'google-drive',
+      'google.drive': 'google-drive',
       'slack': 'slack',
     };
 
@@ -221,7 +221,7 @@ export class InteractorCore {
       }
 
       // Special handling for Google Drive search operations
-      if (integrationId === 'googledrive' && action === 'search_files') {
+      if (integrationId === 'google-drive' && action === 'search_files') {
         processedParams = InteractorCore.buildDriveSearchParams(params);
       }
 
@@ -517,7 +517,7 @@ export class InteractorCore {
    */
   private static mapActionToInteractorAction(integrationId: string, action: string): string | null {
     const actionMaps: Record<string, Record<string, string>> = {
-      'googlecalendar': {
+      'google-calendar': {
         'create_event': 'calendar.events.insert',
         'list_events': 'calendar.events.list',
         'get_today_events': 'calendar.events.list',
@@ -539,7 +539,7 @@ export class InteractorCore {
         'search_messages': 'gmail.users.messages.list',
         'get_attachment': 'gmail.users.messages.attachments.get'
       },
-      'googledrive': {
+      'google-drive': {
         'list_files': 'drive.files.list',
         'get_file': 'drive.files.get',
         'create_folder': 'drive.files.create',
@@ -742,11 +742,11 @@ export class InteractorCore {
       // If integrationId not provided, try to infer from action pattern
       if (!integrationId) {
         if (action.includes('event') || action.includes('calendar')) {
-          integrationId = 'googlecalendar';
+          integrationId = 'google-calendar';
         } else if (action.includes('message') || action.includes('gmail')) {
           integrationId = 'gmail';
         } else if (action.includes('file') || action.includes('drive')) {
-          integrationId = 'googledrive';
+          integrationId = 'google-drive';
         }
       }
 
@@ -764,11 +764,11 @@ export class InteractorCore {
   ): string {
     try {
       switch (integrationId) {
-        case 'googlecalendar':
+        case 'google-calendar':
           return this.formatCalendarResponse(action, data);
         case 'gmail':
           return this.formatGmailResponse(action, data);
-        case 'googledrive':
+        case 'google-drive':
           return this.formatDriveResponse(action, data);
         default:
           return 'Action completed successfully';
@@ -1111,9 +1111,9 @@ export class InteractorCore {
         case 'daily': {
           // Get connection status for all services
           const [calendarStatus, gmailStatus, driveStatus] = await Promise.all([
-            IntegrationService.getStatus('googlecalendar', account),
+            IntegrationService.getStatus('google-calendar', account),
             IntegrationService.getStatus('gmail', account),
-            IntegrationService.getStatus('googledrive', account)
+            IntegrationService.getStatus('google-drive', account)
           ]);
 
           const { getKoreaTime } = await import('../utils/timezone.js');

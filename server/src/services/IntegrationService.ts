@@ -455,7 +455,8 @@ export class IntegrationService {
       let hasValidData = false;
       
       try {
-        const responseBody = response.data?.body || response.data?.output || response.data;
+        // Extract the actual data from the response
+        const responseBody = response.data?.body || response.data?.output?.body || response.data?.output || response.data;
         console.log(`[IntegrationService] API response for ${integrationId}:`, JSON.stringify(responseBody, null, 2));
         
         // Validate response has actual data based on service type
@@ -735,14 +736,15 @@ export class IntegrationService {
     }
   }
 
-  static async getAllStatuses(userEmail: string): Promise<Array<{id: string, connected: boolean}>> {
+  static async getAllStatuses(userEmail: string): Promise<Array<{id: string, connected: boolean, account?: string}>> {
     const integrations = this.getAvailableIntegrations();
     const statuses = await Promise.all(
       integrations.map(async (integration) => {
         const status = await this.getStatus(integration.id, userEmail);
         return {
           id: integration.id,
-          connected: status.connected
+          connected: status.connected,
+          account: status.account
         };
       })
     );
