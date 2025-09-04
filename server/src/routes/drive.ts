@@ -75,9 +75,12 @@ router.get('/files/list', async (req: Request, res: Response) => {
         q: q || undefined,
         pageSize: Math.min(Number(pageSize), 1000),
         pageToken: pageToken || undefined,
-        orderBy: orderBy || undefined,
+        orderBy: orderBy || 'modifiedTime desc', // Default to newest first
         spaces: spaces || undefined,
-        fields: fields
+        fields: fields,
+        // Include shared drives and better visibility
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true
       }
     });
 
@@ -446,15 +449,44 @@ router.get('/search', async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: 'Search query is required' });
     }
 
+    // Ensure query is a string
+    const queryStr = String(query);
+    
+    // Build comprehensive search query
+    const searchTerms = [
+      // Exact name matches
+      `name contains "${queryStr}"`,
+      // Full text search
+      `fullText contains "${queryStr}"`,
+      // Parent folder name search
+      `parents in (select id from files where name contains "${queryStr}")`,
+      // Case variations for better Korean/English support
+      `name contains "${queryStr.toLowerCase()}"`,
+      `name contains "${queryStr.toUpperCase()}"`,
+    ];
+
+    // Add space-separated word searches for better matching
+    const words = queryStr.split(/\s+/).filter((word: string) => word.length > 1);
+    words.forEach((word: string) => {
+      searchTerms.push(`name contains "${word}"`);
+      searchTerms.push(`fullText contains "${word}"`);
+    });
+
+    // Combine all search terms with OR
+    const searchQuery = searchTerms.join(' or ');
+
     const api = await callInteractorApi({
       account,
       connector: 'googledrive-v1',
       action: 'drive.files.list',
       data: {
-        q: `fullText contains "${query}" or name contains "${query}"`,
-        pageSize: Math.min(Number(pageSize), 100),
+        q: searchQuery,
+        pageSize: Math.min(Number(pageSize), 1000), // Increased limit
         pageToken: pageToken || undefined,
-        fields: fields
+        fields: fields,
+        // Include trashed files in search results
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true
       }
     });
 
