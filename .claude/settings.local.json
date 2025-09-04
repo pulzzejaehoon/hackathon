@@ -52,7 +52,8 @@
       "Bash(git tag:*)",
       "Read(//**)",
       "Bash(PORT=3004 npm start)",
-      "Bash(PORT=3001 npm start)"
+      "Bash(PORT=3001 npm start)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
