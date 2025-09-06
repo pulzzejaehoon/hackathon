@@ -20,6 +20,7 @@ import briefingRouter from './routes/briefing.js';
 import chatbotRouter from './routes/chatbot.js';
 import mockOAuthRouter from './routes/mock-oauth.js';
 import interactorRouter from './routes/interactor.js';
+import todosRouter from './routes/todos.js';
 
 // Validate environment before starting server
 console.log('🚀 Starting AI Agent SaaS Server...\n');
@@ -86,6 +87,9 @@ app.use('/api/drive', authMiddleware, driveRouter);
 
 // Daily Briefing API functionality
 app.use('/api/briefing', authMiddleware, briefingRouter);
+
+// Todo management API
+app.use('/api/todos', authMiddleware, todosRouter);
 
 // Legacy: individual connector routes (kept for backward compatibility)
 app.use('/api/connectors/googlecalendar', authMiddleware, googleCalendarConnectorRouter);
